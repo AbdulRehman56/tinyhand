@@ -38,7 +38,7 @@ for arg in "$@"; do
 done
 
 if $uninstall; then
-  rm -f "$BIN_DIR/tinyhand" "$ICON_DIR/tinyhand.png" "$AUTOSTART_FILE"
+  rm -f "$BIN_DIR/tinyhand" "$BIN_DIR/tinyhand-settings" "$ICON_DIR/tinyhand.png" "$AUTOSTART_FILE" "$HOME/.local/share/applications/tinyhand-settings.desktop"
   rm -rf "$DATA_DIR" "$EXTENSION_DIR"
   if $purge; then rm -f "$CONFIG_FILE"; fi
   printf 'Removed TinyHand binary, assets, icon, autostart, and extension.\n'
@@ -59,6 +59,27 @@ mkdir -p "$DATA_DIR/assets/sounds"
 cp "$REPO_ROOT"/assets/hand_*.png "$DATA_DIR/assets/"
 cp "$REPO_ROOT"/assets/sounds/tap_*.wav "$DATA_DIR/assets/sounds/"
 printf 'Installed hand and sound assets: %s\n' "$DATA_DIR/assets"
+
+# Native GTK4/libadwaita settings are usable independently of the Shell overlay.
+SETTINGS_SRC="$REPO_ROOT/linux/companion/$EXTENSION_ID"
+mkdir -p "$DATA_DIR/settings" "$HOME/.local/share/applications"
+cp "$SETTINGS_SRC/preferences.js" "$SETTINGS_SRC/settings.js" "$DATA_DIR/settings/"
+cat > "$BIN_DIR/tinyhand-settings" <<'EOF'
+#!/usr/bin/env sh
+exec gjs -m "$HOME/.local/share/tinyhand/settings/settings.js" "$@"
+EOF
+chmod +x "$BIN_DIR/tinyhand-settings"
+cat > "$HOME/.local/share/applications/tinyhand-settings.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=TinyHand Settings
+Comment=Choose your hand, ink, size, and tap sounds
+Exec="$BIN_DIR/tinyhand-settings"
+Icon=tinyhand
+Categories=Settings;Utility;
+StartupNotify=true
+EOF
+printf 'Installed customization UI: %s/tinyhand-settings\n' "$BIN_DIR"
 
 mkdir -p "$ICON_DIR"
 icon=$(find "$REPO_ROOT/assets" -maxdepth 1 -type f -name 'icon*.png' -print -quit)

@@ -11,8 +11,12 @@ const source = rawSource
     .replace(/^import .*;\n/gm, '')
     .replace('export default class TinyHandExtension', 'class TinyHandExtension');
 let disk = {};
+let pointer = [100, 100, 0];
 const context = vm.createContext({
     Extension: class {}, TextDecoder, console,
+    Main: {overview: {visible: false}},
+    global: {stage: {width: 1920, height: 1080}, display: {focus_window: null},
+        get_pointer: () => pointer},
     GLib: {get_monotonic_time: () => 10e6,
         file_get_contents: () => [true, Buffer.from(JSON.stringify(disk))]},
 });
@@ -67,4 +71,58 @@ test('style cycling wraps through pinned hands and laser', () => {
     assert.equal(ext._config.pointer.style, 'laser');
     ext._cycle();
     assert.equal(ext._config.pointer.style, 'lavender');
+});
+
+function tickingExtension(mode) {
+    const ext = new context.TinyHand();
+    ext._config = {enabled: true, pointer: {style: 'lavender'}, ink: {choice: 'match', fade: 3},
+        interaction: {mode, hideCursor: true}, sound: {hand: false, laser: false}};
+    ext._gripX = null;
+    ext._last = null;
+    ext._held = false;
+    ext._press = 0;
+    ext._strokes = [];
+    ext._active = null;
+    ext._dirty = true;
+    ext._area = {reactive: false, queue_repaint() {}};
+    ext._overControls = () => false;
+    ext._hideSystemCursor = hide => { ext.cursorHidden = hide; };
+    return ext;
+}
+
+test('Point mode never draws or captures normal application clicks', () => {
+    pointer = [100, 100, 0x100];
+    const ext = tickingExtension('point');
+    ext._tick();
+    assert.equal(ext._area.reactive, false);
+    assert.equal(ext._strokes.length, 0);
+    assert.equal(ext.cursorHidden, true);
+});
+
+test('Draw mode captures pointer input; Alt releases it and restores cursor', () => {
+    pointer = [100, 100, 0x100];
+    const ext = tickingExtension('draw');
+    ext._tick();
+    assert.equal(ext._area.reactive, true);
+    assert.equal(ext._strokes.length, 1);
+    assert.equal(ext.cursorHidden, true);
+    pointer = [120, 120, 0x108];
+    ext._tick();
+    assert.equal(ext._area.reactive, false);
+    assert.equal(ext._active, null);
+    assert.equal(ext.cursorHidden, false);
+});
+
+test('cursor visibility inhibition is balanced, including repeated ticks', () => {
+    const ext = new context.TinyHand();
+    let hides = 0, restores = 0;
+    ext._cursorHidden = false;
+    ext._cursorTracker = {inhibit_cursor_visibility() { hides++; },
+        uninhibit_cursor_visibility() { restores++; }};
+    ext._hideSystemCursor(true);
+    ext._hideSystemCursor(true);
+    ext._hideSystemCursor(false);
+    ext._hideSystemCursor(false);
+    assert.equal(hides, 1);
+    assert.equal(restores, 1);
 });

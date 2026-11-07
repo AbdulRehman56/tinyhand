@@ -7,7 +7,7 @@ TinyHand is a tiny hand on a stick that points at things on your screen: click t
 | Session | Mode |
 | --- | --- |
 | Xorg/X11 | The Rust app, `tinyhand`, hides the real cursor, swallows clicks for tapping/drawing, lets panels/dock areas pass through, and provides a StatusNotifier tray menu (toggle / next hand / clear / quit). Hold Alt to interact normally. |
-| GNOME Wayland (45–50) | The companion Shell extension draws the hand as a shell overlay. Clicks are **not** swallowed—they pass through to the app underneath while the hand reacts. This port leaves the system cursor visible. Its bottom-center toolbar has 🖐 cycle hand, 🔊 sound, 🧽 clear, and ✕ hide. |
+| GNOME Wayland (45–50) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. |
 
 Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental local-test build, not a verified parity release; live GNOME Shell interaction still needs testing.
 
@@ -24,6 +24,7 @@ Rust/Cargo is needed to build the X11 app; no system development headers are req
 
 ## Usage
 
+- Open **TinyHand Settings** from your app launcher, run `tinyhand-settings`, or use the toolbar gear. The macOS-inspired sidebar has a visual picker for all 37 pointers plus appearance, drawing, and sound controls. Changes apply immediately; no JSON editing needed. Settings requires GJS, GTK4, and libadwaita (provided by modern GNOME desktops).
 - `tinyhand` — run the app (needs X11; with `WAYLAND_DISPLAY` set it warns and explains).
 - Hotkeys in both modes: Ctrl+Alt+H toggle · Ctrl+Alt+X clear ink · Ctrl+Alt+P next hand.
 - `tinyhand --selftest` renders sample poses to `/tmp/tinyhand-selftest/*.png` (checks assets and fingertip accuracy); `tinyhand --config` prints the config path; `tinyhand --help` shows help.
@@ -49,6 +50,7 @@ Config is shared by both apps and hot-reloads on save.
 | `pointer.style` | `lavender`, `glove`, `coral`, `plush`, `robot`, `pink`, `blue`, `mint`, `lemon`, `black`, `chrome`, `holo`, `fuzzy`, `wood`, `marble`, `terrazzo`, `glass`, `jelly`, `pastel`, `pixel`, `lowpoly`, `knit`, `skeleton`, `astro`, `space`, `monster`, `water`, `lava`, `grass`, `cactus`, `choco`, `cloud`, `mech`, `neon`, `leaf`, `cookie`, or `laser` |
 | `pointer.size` | Hand size as a fraction of screen height, `0.08`–`0.20` (default `0.13`). |
 | `pointer.shadow` | Boolean. |
+| `interaction.mode`, `interaction.hideCursor` | GNOME only: `point` (default, normal clicks/no ink) or `draw` (captures drags); hide the system cursor by default. Cursor visibility is restored when TinyHand is disabled. |
 | `ink.choice` | `match` (each hand's matching color), or `red` / `orange` / `yellow` / `green` / `blue` / `purple` / `white` / `black`. |
 | `ink.fade` | Seconds; `0` keeps strokes until cleared. |
 | `sound.hand`, `sound.laser` | Booleans for tap sounds on hand and laser clicks. |
