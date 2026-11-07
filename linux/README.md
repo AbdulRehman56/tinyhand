@@ -36,6 +36,9 @@ cargo test --manifest-path linux/Cargo.toml
 cargo run --manifest-path linux/Cargo.toml -- --selftest
 node --test linux/tests/companion.test.cjs
 gjs -m linux/tests/companion-render.mjs
+# On a graphical desktop, validates actual allocations and isolated setting writes:
+test_config=$(mktemp -d -t tinyhand-layout.XXXXXX)
+XDG_CONFIG_HOME="$test_config" gjs -m linux/tests/preferences-layout.mjs
 glib-compile-schemas --strict --dry-run linux/companion/tinyhand@abdulrehmankhan56/schemas
 ```
 

@@ -103,20 +103,22 @@ export function buildPreferences(window, assetDir = null) {
         return id;
     };
     window.set_title('TinyHand Settings');
-    window.set_default_size(840, 620);
+    window.set_default_size(920, 680);
     // Keep the native preferences host, but mirror TinyHand's compact sidebar
     // and card-based settings rather than a long, tabbed GNOME form.
     const host = new Adw.PreferencesPage({title: 'TinyHand'});
     const workspaceGroup = new Adw.PreferencesGroup();
-    const workspace = new Gtk.Box({spacing: 20, height_request: 470});
+    const workspace = new Gtk.Box({spacing: 16, height_request: 510, width_request: 720,
+        hexpand: true, vexpand: true});
     const stack = new Gtk.Stack({hexpand: true, vexpand: true,
         transition_type: Gtk.StackTransitionType.CROSSFADE});
-    const sidebar = new Gtk.StackSidebar({stack, width_request: 145, valign: Gtk.Align.FILL});
+    const sidebar = new Gtk.StackSidebar({stack, width_request: 155, valign: Gtk.Align.FILL,
+        vexpand: true});
     sidebar.add_css_class('navigation-sidebar');
-    const rail = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 12});
+    const rail = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 12, vexpand: true});
     rail.append(sidebar);
     const brand = new Gtk.Label({label: 'TinyHand', xalign: 0, margin_start: 12,
-        margin_bottom: 12, valign: Gtk.Align.END, vexpand: true});
+        margin_bottom: 12, valign: Gtk.Align.END});
     brand.add_css_class('heading');
     rail.append(brand);
     workspace.append(rail);
@@ -267,11 +269,11 @@ export function buildPreferences(window, assetDir = null) {
     const selection = new Gtk.Label({xalign: 0, margin_bottom: 8});
     gallery.add(selection);
     const flow = new Gtk.FlowBox({selection_mode: Gtk.SelectionMode.NONE,
-        min_children_per_line: 2, max_children_per_line: 5, row_spacing: 6, column_spacing: 6,
+        min_children_per_line: 3, max_children_per_line: 4, row_spacing: 8, column_spacing: 8,
         homogeneous: true, valign: Gtk.Align.START});
-    const scroll = new Gtk.ScrolledWindow({hscrollbar_policy: Gtk.PolicyType.NEVER,
-        vscrollbar_policy: Gtk.PolicyType.AUTOMATIC, height_request: 340, child: flow});
-    gallery.add(scroll);
+    // One scroll surface per section: nesting another scroller clips the gallery
+    // and makes wheel/keyboard navigation unpredictable.
+    gallery.add(flow);
     const tiles = new Map();
     for (const style of STYLES) {
         const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6,
