@@ -1,0 +1,10 @@
+{
+  "uuid": "tinyhand@abdulrehmankhan56",
+  "name": "TinyHand",
+  "description": "A tiny hand on a stick that follows your cursor, with tap sounds and fading ink. A click-through companion for GNOME on Wayland.",
+  "url": "https://github.com/AbdulRehman56/tinyhand",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "settings-schema": "org.gnome.shell.extensions.tinyhand",
+  "version": 1,
+  "version-name": "1.0.2-linux-preview"
+}
