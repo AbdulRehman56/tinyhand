@@ -6,7 +6,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.join(__dirname, '../companion/tinyhand@abdulrehmankhan56');
-const source = fs.readFileSync(path.join(root, 'extension.js'), 'utf8')
+const rawSource = fs.readFileSync(path.join(root, 'extension.js'), 'utf8');
+const source = rawSource
     .replace(/^import .*;\n/gm, '')
     .replace('export default class TinyHandExtension', 'class TinyHandExtension');
 let disk = {};
@@ -21,6 +22,11 @@ test('metadata uses the GNOME integer version format', () => {
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'metadata.json')));
     assert.equal(Number.isInteger(metadata.version), true);
     assert.ok(metadata['shell-version'].includes('50'));
+});
+
+test('companion uses GDK 4 like the GNOME 50 host', () => {
+    assert.ok(rawSource.includes("from 'gi://Gdk?version=4.0'"));
+    assert.ok(!rawSource.includes('gi://Gdk?version=3.0'));
 });
 
 test('partial config falls back safely and clamps hand size', () => {

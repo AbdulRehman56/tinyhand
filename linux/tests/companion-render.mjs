@@ -3,7 +3,7 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
-import Gdk from 'gi://Gdk?version=3.0';
+import Gdk from 'gi://Gdk?version=4.0';
 import cairo from 'cairo';
 
 const root = ARGV[0] ?? GLib.get_current_dir();
