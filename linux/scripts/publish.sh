@@ -44,7 +44,7 @@ if [[ -n $(git status --porcelain) ]]; then
   git diff --cached --check
   git commit -m 'release(linux): prepare attributed GNOME and X11 prerelease'
 fi
-gh auth status --active >/dev/null
+gh auth status --hostname github.com >/dev/null
 [[ $(gh repo view AbdulRehman56/tinyhand --json visibility --jq .visibility) == PUBLIC ]] || {
   printf 'Expected the existing public fork; refusing to change repository visibility.\n' >&2
   exit 1
