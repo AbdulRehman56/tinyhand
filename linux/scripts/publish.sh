@@ -3,18 +3,25 @@ set -euo pipefail
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   cat <<'EOF'
-Usage: ./linux/scripts/publish.sh
+Usage: ./linux/scripts/publish.sh [--upstream-pr]
 
-Commit the reviewed publication files on linux-port, prepare an upstream
-branch with a minimal README addition, push both to the public fork, make
-linux-port its default, open the upstream draft PR, and wait for the checked
+Commit the reviewed publication files on linux-port, push the public fork,
+make linux-port its default, and wait for the checked
 GitHub Actions prerelease. Requires Git, Python 3, tar, authenticated GitHub
 CLI (gh), a writable .git directory, network access, and permission to publish.
 Does not submit the extension to extensions.gnome.org.
+
+Upstream PR work is paused by default. --upstream-pr explicitly opts into
+preparing/pushing the upstream branch and opening a draft PR.
 EOF
   exit 0
 fi
-[[ $# == 0 ]] || { printf 'Use --help for usage.\n' >&2; exit 1; }
+include_upstream=false
+if [[ ${1:-} == --upstream-pr && $# == 1 ]]; then
+  include_upstream=true
+elif [[ $# != 0 ]]; then
+  printf 'Use --help for usage.\n' >&2; exit 1
+fi
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
 cd "$ROOT"
@@ -27,7 +34,7 @@ reviewed_files=(
   linux/companion/tinyhand@abdulrehmankhan56/extension.js
   linux/companion/tinyhand@abdulrehmankhan56/metadata.json
   linux/companion/tinyhand@abdulrehmankhan56/preferences.js
-  linux/tests/companion-render.mjs linux/tests/companion.test.cjs
+  linux/tests/companion-render.mjs linux/tests/companion.test.cjs linux/tests/preferences-layout.mjs linux/tests/publication.test.cjs
   linux/scripts/install-release.sh linux/scripts/package.sh linux/scripts/publish.sh
   .github/workflows/linux.yml
 )
@@ -49,6 +56,7 @@ gh auth status --hostname github.com >/dev/null
   printf 'Expected the existing public fork; refusing to change repository visibility.\n' >&2
   exit 1
 }
+if $include_upstream; then
 if ! git show-ref --verify --quiet refs/heads/linux-port-upstream; then
   git fetch https://github.com/nilbuild/tinyhand.git main
   upstream_base=$(git rev-parse FETCH_HEAD)
@@ -93,8 +101,14 @@ done
 git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push --atomic \
   https://github.com/AbdulRehman56/tinyhand.git \
   linux-port:refs/heads/linux-port linux-port-upstream:refs/heads/linux-port-upstream
+else
+  git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push \
+    https://github.com/AbdulRehman56/tinyhand.git linux-port:refs/heads/linux-port
+  printf 'Upstream PR is paused; its branch and draft are unchanged.\n'
+fi
 gh repo edit AbdulRehman56/tinyhand --default-branch linux-port \
   --description 'Independent Linux port of TinyHand by Kamran Ahmed (@nilbuild). GNOME 45-50 (45-49 experimental) and X11.'
+if $include_upstream; then
 pr_url=$(gh api 'repos/nilbuild/tinyhand/pulls?state=open&head=AbdulRehman56%3Alinux-port-upstream' \
   --jq '.[0].html_url // empty')
 if [[ -z "$pr_url" ]]; then
@@ -104,6 +118,7 @@ if [[ -z "$pr_url" ]]; then
     --body-file linux/UPSTREAM_PR.md)
 fi
 printf 'Upstream PR: %s\n' "$pr_url"
+fi
 commit_sha=$(git rev-parse linux-port)
 find_run() {
   local run_id=''

@@ -11,6 +11,7 @@ const DEFAULTS = {
     ink: {choice: 'match', fade: 3.0},
     sound: {hand: true, laser: false, tap: 'thock'},
     interaction: {mode: 'point', hideCursor: true},
+    toolbar: {pinnedStyles: ['lavender', 'glove', 'coral', 'plush', 'robot', 'laser']},
 };
 const STYLES = [
     'lavender', 'glove', 'coral', 'plush', 'robot', 'pink', 'blue', 'mint',
@@ -22,6 +23,9 @@ const STYLES = [
 const COLORS = ['match', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'white', 'black'];
 const TAPS = ['thock', 'click', 'pop', 'boop', 'squeak', 'wood'];
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const pinnedStyles = value => Array.isArray(value)
+    ? [...new Set(value.filter(style => STYLES.includes(style)))].slice(0, 6)
+    : [...DEFAULTS.toolbar.pinnedStyles];
 const title = value => ({lowpoly: 'Low Poly', choco: 'Chocolate', holo: 'Holographic',
     astro: 'Astronaut', mech: 'Mechanical', match: 'Match pointer'}[value] ??
     value.charAt(0).toUpperCase() + value.slice(1));
@@ -155,6 +159,8 @@ export function buildPreferences(window, assetDir = null) {
         if (closed) return;
         try {
             config = merge(DEFAULTS, read().value);
+            config.toolbar = merge(isObject(config.toolbar) ? config.toolbar : {},
+                {pinnedStyles: pinnedStyles(config.toolbar?.pinnedStyles)});
             syncing = true;
             for (const update of bindings) update(config);
             showError(null);
@@ -171,9 +177,11 @@ export function buildPreferences(window, assetDir = null) {
             // Read on EVERY interaction, preserving unknown keys and other clients' edits.
             // An etag conflict refuses the write instead of overwriting a concurrent edit.
             const {value, etag} = read();
+            const changes = typeof patch === 'function' ? patch(value) : patch;
+            if (!changes) return;
             if (GLib.mkdir_with_parents(directory, 0o700) !== 0)
                 throw new Error('Cannot create the configuration directory');
-            file.replace_contents(JSON.stringify(merge(value, patch), null, 2) + '\n',
+            file.replace_contents(JSON.stringify(merge(value, changes), null, 2) + '\n',
                 etag, false, Gio.FileCreateFlags.PRIVATE, null);
             refresh();
         } catch (error) {
@@ -269,8 +277,17 @@ export function buildPreferences(window, assetDir = null) {
         'interaction', 'hideCursor', true);
     const pointersPage = page('Pointers', 'input-mouse-symbolic');
     const gallery = group(pointersPage, 'Choose a pointer', '36 hands and a laser dot. Click a card to use it.');
+    const search = new Gtk.SearchEntry({placeholder_text: 'Search pointers', hexpand: true});
+    search.update_property([Gtk.AccessibleProperty.LABEL], ['Search pointers by name or style']);
+    gallery.add(search);
     const selection = new Gtk.Label({xalign: 0, margin_bottom: 8});
     gallery.add(selection);
+    const pinnedCount = new Gtk.Label({xalign: 0, wrap: true});
+    pinnedCount.add_css_class('dim-label');
+    gallery.add(pinnedCount);
+    const pinFeedback = new Gtk.Label({xalign: 0, wrap: true, visible: false,
+        accessible_role: Gtk.AccessibleRole.STATUS});
+    gallery.add(pinFeedback);
     const flow = new Gtk.FlowBox({selection_mode: Gtk.SelectionMode.NONE,
         min_children_per_line: 3, max_children_per_line: 4, row_spacing: 8, column_spacing: 8,
         homogeneous: true, valign: Gtk.Align.START});
@@ -278,6 +295,21 @@ export function buildPreferences(window, assetDir = null) {
     // and makes wheel/keyboard navigation unpredictable.
     gallery.add(flow);
     const tiles = new Map();
+    const pins = new Map();
+    const searchNames = new Map();
+    const emptySearch = new Gtk.Label({label: 'No pointers found. Try another name.', xalign: 0,
+        visible: false, wrap: true, accessible_role: Gtk.AccessibleRole.STATUS});
+    gallery.add(emptySearch);
+    function filterPointers() {
+        const query = search.text.trim().toLowerCase();
+        let matches = 0;
+        for (const [child, name] of searchNames) {
+            child.visible = !query || name.includes(query);
+            if (child.visible) matches++;
+        }
+        emptySearch.visible = matches === 0;
+    }
+    connect(search, 'changed', filterPointers);
     for (const style of STYLES) {
         const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6,
             margin_top: 8, margin_bottom: 8, margin_start: 4, margin_end: 4});
@@ -308,12 +340,42 @@ export function buildPreferences(window, assetDir = null) {
         const tile = new Gtk.ToggleButton({child: box, tooltip_text: title(style)});
         tile.update_property([Gtk.AccessibleProperty.LABEL], [title(style)]);
         connect(tile, 'clicked', () => save({pointer: {style}}));
-        flow.insert(tile, -1);
+        const card = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 4});
+        card.append(tile);
+        const pin = new Gtk.Button();
+        card.append(pin);
+        connect(pin, 'clicked', () => save(value => {
+            const current = pinnedStyles(value.toolbar?.pinnedStyles);
+            const isPinned = current.includes(style);
+            if (!isPinned && current.length >= 6) {
+                pinFeedback.label = 'Toolbar is full (6/6). Unpin a pointer before adding another.';
+                pinFeedback.visible = true;
+                return null;
+            }
+            pinFeedback.visible = false;
+            return {toolbar: {pinnedStyles: isPinned
+                ? current.filter(name => name !== style) : [...current, style]}};
+        }));
+        flow.insert(card, -1);
+        searchNames.set(card.get_parent(), `${style} ${title(style)}`.toLowerCase());
+        pins.set(style, pin);
         tiles.set(style, tile);
     }
+    filterPointers();
     bindings.push(value => {
         const style = value.pointer?.style ?? DEFAULTS.pointer.style;
         selection.label = `Selected: ${STYLES.includes(style) ? title(style) : style}`;
+        const pinned = value.toolbar.pinnedStyles;
+        pinnedCount.label = `Pinned ${pinned.length}/6 · Pin pointers for quick access in the toolbar.`;
+        for (const [name, pin] of pins) {
+            const isPinned = pinned.includes(name);
+            const label = `${isPinned ? 'Unpin' : 'Pin'} ${title(name)} ${isPinned ? 'from' : 'to'} toolbar`;
+            pin.label = isPinned ? 'Unpin' : 'Pin to toolbar';
+            pin.tooltip_text = label;
+            pin.update_property([Gtk.AccessibleProperty.LABEL], [label]);
+            if (isPinned) pin.add_css_class('accent');
+            else pin.remove_css_class('accent');
+        }
         for (const [name, tile] of tiles) {
             tile.active = name === style;
             if (tile.active) tile.add_css_class('suggested-action');
@@ -398,7 +460,11 @@ export function buildPreferences(window, assetDir = null) {
     resetRow.add_suffix(resetButton);
     resetRow.activatable_widget = resetButton;
     reset.add(resetRow);
-    connect(resetButton, 'clicked', () => save(DEFAULTS));
+    connect(resetButton, 'clicked', () => {
+        search.text = '';
+        pinFeedback.visible = false;
+        save(DEFAULTS);
+    });
     // Open on the visual picker: this is a customization window first.
     stack.visible_child_name = 'pointers';
 

@@ -31,7 +31,7 @@ jobs:
       - name: Test Rust
         run: cargo test --manifest-path linux/Cargo.toml --locked
       - name: Test companion logic
-        run: node linux/tests/companion.test.cjs
+        run: node --test linux/tests/*.test.cjs
       - name: Validate JavaScript and shell syntax
         shell: bash
         run: |

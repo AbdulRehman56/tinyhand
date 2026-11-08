@@ -1,5 +1,21 @@
 # Linux release notes
 
+## v1.0.2-linux.3 — GNOME usability and customization
+
+- Use **TinyHand** as the display name; keep the same extension UUID and original creator credit.
+- Search the pointer gallery and choose up to six toolbar favorites in Settings.
+- The selected hand stays visible in the toolbar even when it is not pinned.
+- Keep the toolbar in the primary monitor's usable work area and scale it down on narrow displays.
+  This does not resolve every mixed-scale/multi-monitor hand-aiming limitation.
+- Debounce configuration changes and watch the parent directory so atomic saves remain observable.
+  Toolbar actions refuse to overwrite malformed configuration files.
+- Publication now leaves the upstream draft PR untouched unless `--upstream-pr` is explicitly requested.
+- GNOME approval is separate; the existing listing may still show the prior submitted build
+  until the updated ZIP is uploaded and approved.
+- Verified locally: 9 Rust tests, 31 Node checks, all 36 Cairo hand renders, and isolated
+  GTK search/pinning/settings-layout checks. Toolbar positioning remains mock-tested,
+  not a certification of every monitor/scaling arrangement.
+
 ## v1.0.2-linux.2 — GNOME submission compatibility
 
 - Separate the human-readable GNOME version (`1.0.2 Linux 2`) from the GitHub

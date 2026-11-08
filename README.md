@@ -73,6 +73,8 @@ Add `~/.local/bin` to your `PATH` to use `tinyhand` and `tinyhand-settings` dire
 - Open **TinyHand Settings** from your app launcher, the toolbar gear, or
   `~/.local/bin/tinyhand-settings`. Its macOS-inspired sidebar offers a visual picker for
   **all 37 pointers** (36 hands and a laser), appearance, drawing, and sound controls.
+- Search the hand gallery and pin up to six favorites to the GNOME toolbar. The currently
+  selected pointer remains accessible even when it is not pinned.
 - GNOME **Point** mode permits normal clicks without ink. **Draw** mode captures drags
   to draw without selecting content underneath. Hold **Alt** to interact normally.
 - The GNOME toolbar provides pointer previews, Point/Draw, ink colors, sound, clear,
@@ -104,7 +106,7 @@ Uninstall keeps your config; add `--purge` only if you want to delete it too.
 Rust tests, offline render/self-tests, companion logic checks, and GTK settings tests
 cover parts of the implementation—not every live desktop interaction. Mixed-scale and
 multi-monitor setups, shortcut conflicts, click-through, and other extensions need
-desktop testing. Custom hands, pin reordering, and a complete hotkey settings UI remain
+desktop testing. Custom hands, drag-and-drop pin reordering, and a complete hotkey settings UI remain
 gaps relative to macOS. See [release notes](./linux/RELEASE_NOTES.md) for the tested scope.
 
 Bug reports and focused patches are welcome; include your session type, GNOME version,

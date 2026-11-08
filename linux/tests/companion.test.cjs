@@ -11,6 +11,7 @@ const source = rawSource
     .replace(/^import .*;\n/gm, '')
     .replace('export default class TinyHandExtension', 'class TinyHandExtension');
 let disk = {};
+let rawDisk = null;
 let pointer = [100, 100, 0];
 const context = vm.createContext({
     Extension: class {}, TextDecoder, console,
@@ -18,13 +19,15 @@ const context = vm.createContext({
     global: {stage: {width: 1920, height: 1080}, display: {focus_window: null},
         get_pointer: () => pointer},
     GLib: {get_monotonic_time: () => 10e6,
-        file_get_contents: () => [true, Buffer.from(JSON.stringify(disk))]},
+        file_get_contents: () => [true, Buffer.from(rawDisk ?? JSON.stringify(disk))],
+        file_test: () => true, FileTest: {EXISTS: 1}},
 });
-vm.runInContext(`${source}\nthis.TinyHand = TinyHandExtension; this.mergeConfig = merge;`, context);
+vm.runInContext(`${source}\nthis.TinyHand = TinyHandExtension; this.mergeConfig = merge; this.readConfigJson = readJson;`, context);
 
 test('metadata uses the GNOME integer version format', () => {
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'metadata.json')));
     assert.equal(Number.isInteger(metadata.version), true);
+    assert.equal(metadata.name, 'TinyHand');
     assert.ok(metadata['shell-version'].includes('50'));
     assert.match(metadata['version-name'], /^[A-Za-z0-9. ]+$/, 'GNOME store rejects hyphenated version names');
 });
@@ -71,6 +74,137 @@ test('style cycling wraps through pinned hands and laser', () => {
     assert.equal(ext._config.pointer.style, 'laser');
     ext._cycle();
     assert.equal(ext._config.pointer.style, 'lavender');
+});
+
+test('custom toolbar pins reject invalid values and deduplicate with a six-pin limit', () => {
+    const ext = new context.TinyHand();
+    ext._config = {toolbar: {pinnedStyles: ['mint', 'mint', null, {}, '__proto__', 'robot',
+        'cookie', 'blue', 'laser', 'coral', 'glove']}};
+    assert.deepEqual(Array.from(ext._pinnedStyles()), ['mint', 'robot', 'cookie', 'blue', 'laser', 'coral']);
+    ext._config.toolbar.pinnedStyles = [];
+    assert.deepEqual(Array.from(ext._pinnedStyles()), []);
+    ext._config.toolbar.pinnedStyles = 'invalid';
+    assert.equal(ext._pinnedStyles().length, 6);
+});
+
+test('keyboard cycling uses custom pins and safely handles an empty toolbar', () => {
+    const ext = new context.TinyHand();
+    ext._config = {pointer: {style: 'mint'}, toolbar: {pinnedStyles: ['mint', 'cookie']}};
+    ext._update = patch => { ext._config.pointer.style = patch.pointer.style; };
+    ext._cycle();
+    assert.equal(ext._config.pointer.style, 'cookie');
+    ext._cycle();
+    assert.equal(ext._config.pointer.style, 'mint');
+    ext._config.toolbar.pinnedStyles = [];
+    ext._cycle();
+    assert.equal(ext._config.pointer.style, 'lavender');
+});
+
+test('toolbar rebuild includes the selected unpinned hand and destroys stale controls', () => {
+    context.St = {Icon: class {}};
+    const ext = new context.TinyHand();
+    ext._config = {pointer: {style: 'cookie'}, toolbar: {pinnedStyles: ['mint']}};
+    ext._shownStyles = null;
+    ext._styleSignals = [];
+    ext._styleButtons = new Map();
+    const children = [];
+    let destroyed = 0, disconnected = 0;
+    ext._styleBox = {get_children: () => [...children]};
+    ext._thumbnail = () => null;
+    ext._toolbarButton = () => {
+        const actor = {destroy() { destroyed++; children.splice(children.indexOf(actor), 1); },
+            disconnect() { disconnected++; }};
+        children.push(actor);
+        ext._styleSignals.push([actor, 1]);
+        return actor;
+    };
+    ext._rebuildStyleButtons();
+    assert.deepEqual([...ext._styleButtons.keys()], ['mint', 'cookie']);
+    ext._rebuildStyleButtons();
+    assert.equal(destroyed, 0);
+    ext._config.pointer.style = 'mint';
+    ext._rebuildStyleButtons();
+    assert.deepEqual([...ext._styleButtons.keys()], ['mint']);
+    assert.equal(destroyed, 2);
+    assert.equal(disconnected, 2);
+    delete context.St;
+});
+
+test('strict configuration reads protect malformed JSON and non-object settings', () => {
+    try {
+        rawDisk = '{';
+        assert.throws(() => context.readConfigJson('/config.json', true));
+        assert.equal(Object.keys(context.readConfigJson('/config.json')).length, 0);
+        rawDisk = '[]';
+        assert.throws(() => context.readConfigJson('/config.json', true), /JSON object/);
+    } finally { rawDisk = null; }
+});
+
+test('malformed config reload preserves the currently active settings', () => {
+    const ext = new context.TinyHand();
+    const settings = {pointer: {style: 'mint'}, interaction: {mode: 'draw'}};
+    const previousConsole = context.console;
+    ext._config = settings;
+    ext._configPath = '/config.json';
+    try {
+        context.console = {warn() {}};
+        rawDisk = '{';
+        ext._reload();
+        assert.equal(ext._config, settings);
+    } finally {
+        rawDisk = null;
+        context.console = previousConsole;
+    }
+});
+
+test('config monitoring debounces atomic-save events and removes its completed source', () => {
+    const pending = new Map();
+    let sequence = 0, reloads = 0;
+    context.GLib.timeout_add = (_priority, _delay, callback) => {
+        pending.set(++sequence, callback);
+        return sequence;
+    };
+    context.GLib.source_remove = id => pending.delete(id);
+    const ext = new context.TinyHand();
+    ext._sources = new Set();
+    ext._running = true;
+    ext._reloadSource = 0;
+    ext._reload = () => { reloads++; };
+    ext._queueReload();
+    ext._queueReload();
+    assert.equal(pending.size, 1);
+    assert.equal(ext._sources.size, 1);
+    pending.get(sequence)();
+    assert.equal(reloads, 1);
+    assert.equal(ext._sources.size, 0);
+    assert.equal(ext._reloadSource, 0);
+    delete context.GLib.timeout_add;
+    delete context.GLib.source_remove;
+});
+
+test('toolbar stays in the primary work area and shrinks safely on small displays', () => {
+    const monitor = {index: 1, x: 1920, y: 0, width: 1280, height: 720};
+    let area = {x: 1920, y: 24, width: 1280, height: 660};
+    context.Main.layoutManager = {primaryMonitor: monitor};
+    context.global.workspace_manager = {get_active_workspace: () => ({get_work_area_for_monitor: () => area})};
+    const actor = (width, height) => ({visible: true, width, height, scale: 1,
+        set_scale(value) { this.scale = value; }, set_position(x, y) { this.x = x; this.y = y; },
+        get_transformed_position() { return [this.x, this.y]; },
+        get_transformed_size() { return [this.width * this.scale, this.height * this.scale]; }});
+    const ext = new context.TinyHand();
+    ext._toolbar = actor(900, 54);
+    ext._inkTray = actor(400, 44);
+    ext._positionToolbar();
+    assert.ok(ext._toolbar.x >= area.x);
+    assert.ok(ext._toolbar.y + 54 <= area.y + area.height);
+    area = {...area, width: 400};
+    ext._positionToolbar();
+    assert.ok(ext._toolbar.scale < 1);
+    assert.ok(ext._toolbar.x + 900 * ext._toolbar.scale <= area.x + area.width);
+    assert.equal(ext._overControls(ext._toolbar.x + 5, ext._toolbar.y + 5), true);
+    assert.equal(ext._overControls(ext._toolbar.x + 1000, ext._toolbar.y + 5), false);
+    delete context.Main.layoutManager;
+    delete context.global.workspace_manager;
 });
 
 function tickingExtension(mode) {

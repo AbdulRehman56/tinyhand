@@ -17,6 +17,7 @@ const DEFAULTS = {
     sound: {hand: true, laser: false, tap: 'thock'},
     interact: {key: 'alt', keepsHand: false},
     interaction: {mode: 'point', hideCursor: true},
+    toolbar: {pinnedStyles: ['lavender', 'glove', 'coral', 'plush', 'robot', 'laser']},
     hotkeys: {},
     seenWelcome: false,
 };
@@ -59,12 +60,14 @@ function merge(base, extra) {
     return result;
 }
 
-function readJson(path) {
+function readJson(path, strict = false) {
     try {
         const [ok, bytes] = GLib.file_get_contents(path);
         const value = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+        if (!object(value) && strict) throw new Error('Configuration must be a JSON object');
         return object(value) ? value : {};
-    } catch (_) {
+    } catch (error) {
+        if (strict && GLib.file_test(path, GLib.FileTest.EXISTS)) throw error;
         return {};
     }
 }
@@ -77,6 +80,7 @@ function writeJson(path, value) {
 export default class TinyHandExtension extends Extension {
     enable() {
         this._sources = new Set();
+        this._reloadSource = 0;
         this._signals = [];
         this._bound = [];
         this._assets = new Map();
@@ -87,6 +91,7 @@ export default class TinyHandExtension extends Extension {
         this._last = null;
         this._held = false;
         this._dirty = true;
+        this._toolbarScale = 1;
         this._running = true;
         this._cursorTracker = this._getCursorTracker();
         this._cursorHidden = false;
@@ -106,6 +111,8 @@ export default class TinyHandExtension extends Extension {
         this._createToolbar();
         this._connect(global.stage, 'notify::width', () => this._resize());
         this._connect(global.stage, 'notify::height', () => this._resize());
+        this._connect(Main.layoutManager, 'monitors-changed', () => this._resize());
+        this._connect(global.display, 'workareas-changed', () => this._positionToolbar());
         this._connect(this._toolbar, 'notify::width', () => this._positionToolbar());
         this._resize();
 
@@ -134,8 +141,11 @@ export default class TinyHandExtension extends Extension {
         }
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._configPath), 0o700);
-            this._monitor = Gio.File.new_for_path(this._configPath).monitor_file(Gio.FileMonitorFlags.NONE, null);
-            this._connect(this._monitor, 'changed', () => this._reload());
+            this._monitor = Gio.File.new_for_path(GLib.path_get_dirname(this._configPath))
+                .monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._connect(this._monitor, 'changed', (_monitor, file, other) => {
+                if ([file?.get_basename(), other?.get_basename()].includes('config.json')) this._queueReload();
+            });
         } catch (error) {
             console.warn(`TinyHand: cannot watch configuration: ${error}`);
         }
@@ -147,9 +157,9 @@ export default class TinyHandExtension extends Extension {
         this._signals.push([object_, object_.connect(signal, callback)]);
     }
 
-    _readConfig() {
-        const config = merge(DEFAULTS, readJson(this._configPath));
-        for (const key of ['pointer', 'ink', 'sound', 'interact', 'interaction', 'hotkeys']) {
+    _readConfig(strict = false) {
+        const config = merge(DEFAULTS, readJson(this._configPath, strict));
+        for (const key of ['pointer', 'ink', 'sound', 'interact', 'interaction', 'toolbar', 'hotkeys']) {
             if (!object(config[key])) config[key] = {...DEFAULTS[key]};
         }
         config.enabled = typeof config.enabled === 'boolean' ? config.enabled : true;
@@ -162,10 +172,29 @@ export default class TinyHandExtension extends Extension {
         return config;
     }
 
+    _queueReload() {
+        if (this._reloadSource) {
+            GLib.source_remove(this._reloadSource);
+            this._sources.delete(this._reloadSource);
+        }
+        this._reloadSource = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+            this._sources.delete(this._reloadSource);
+            this._reloadSource = 0;
+            if (this._running) this._reload();
+            return GLib.SOURCE_REMOVE;
+        });
+        this._sources.add(this._reloadSource);
+    }
+
     _reload() {
         const oldStyle = this._config.pointer.style;
         const oldMode = this._config.interaction.mode;
-        this._config = this._readConfig();
+        try {
+            this._config = this._readConfig(true);
+        } catch (error) {
+            console.warn(`TinyHand: configuration reload ignored: ${error}`);
+            return;
+        }
         if (oldStyle !== this._config.pointer.style)
             this._assets.delete(oldStyle);
         if (!this._config.enabled || oldMode !== this._config.interaction.mode)
@@ -174,6 +203,7 @@ export default class TinyHandExtension extends Extension {
         if (!this._assetDir) {
             this._assetDir = this._findAssets();
             this._assets.clear();
+            this._shownStyles = null;
         }
         this._dirty = true;
         this._visibility();
@@ -182,7 +212,7 @@ export default class TinyHandExtension extends Extension {
     _update(patch) {
         try {
             // Merge into the latest disk contents, not our defaults, preserving other clients' keys.
-            writeJson(this._configPath, merge(readJson(this._configPath), patch));
+            writeJson(this._configPath, merge(readJson(this._configPath, true), patch));
             this._reload();
         } catch (error) {
             console.warn(`TinyHand: cannot save configuration: ${error}`);
@@ -212,8 +242,17 @@ export default class TinyHandExtension extends Extension {
     }
 
     _cycle() {
-        const i = DEFAULT_PINNED.indexOf(this._config.pointer.style);
-        this._update({pointer: {style: DEFAULT_PINNED[(i + 1) % DEFAULT_PINNED.length]}});
+        const pinned = this._pinnedStyles();
+        const pool = pinned.length ? pinned : DEFAULT_PINNED;
+        const i = pool.indexOf(this._config.pointer.style);
+        this._update({pointer: {style: pool[(i + 1) % pool.length]}});
+    }
+
+    _pinnedStyles() {
+        const configured = this._config.toolbar?.pinnedStyles;
+        return Array.isArray(configured)
+            ? [...new Set(configured)].filter(style => typeof style === 'string' && Object.hasOwn(STYLE_INK, style)).slice(0, 6)
+            : [...DEFAULT_PINNED];
     }
 
     _clear() {
@@ -230,33 +269,13 @@ export default class TinyHandExtension extends Extension {
         this._hint = new St.Label({reactive: false, visible: false,
             style: 'background-color: rgba(24,24,28,0.96); color: white; font-size: 12px; border-radius: 8px; padding: 6px 10px;'});
         global.stage.add_child(this._hint);
-        const button = (child, description, callback, parent = this._toolbar) => {
-            const actor = new St.Button({child, reactive: true, can_focus: true, track_hover: true,
-                accessible_name: description, style_class: 'button',
-                style: 'min-width: 36px; min-height: 36px; padding: 2px; border-radius: 10px;'});
-            this._connect(actor, 'clicked', callback);
-            this._connect(actor, 'notify::hover', () => {
-                this._hint.text = description;
-                this._hint.visible = actor.hover && this._toolbar.visible;
-                this._hint.set_position(Math.max(0, this._toolbar.x + (this._toolbar.width - this._hint.width) / 2),
-                    Math.max(0, this._toolbar.y - 42));
-            });
-            parent.add_child(actor);
-            return actor;
-        };
+        const button = (...args) => this._toolbarButton(...args);
         this._styleButtons = new Map();
-        for (const style of DEFAULT_PINNED) {
-            let image;
-            const thumbnail = style === 'laser' ? null : this._thumbnail(style);
-            if (thumbnail) {
-                image = new St.Icon({gicon: new Gio.FileIcon({file: Gio.File.new_for_path(thumbnail)}), icon_size: 36});
-            } else {
-                image = new St.Icon({icon_name: 'media-record-symbolic', icon_size: 24,
-                    style: style === 'laser' ? 'color: #ff453a;' : 'color: #c4a7ff;'});
-            }
-            const title = style === 'laser' ? 'Laser' : style[0].toUpperCase() + style.slice(1);
-            this._styleButtons.set(style, button(image, title, () => this._update({pointer: {style}})));
-        }
+        this._styleSignals = [];
+        this._shownStyles = null;
+        this._styleBox = new St.BoxLayout({style: 'spacing: 6px;'});
+        this._toolbar.add_child(this._styleBox);
+        this._rebuildStyleButtons();
         this._toolbar.add_child(new St.Widget({style: 'width: 1px; margin: 5px 4px; background-color: rgba(255,255,255,0.18);'}));
         this._modeIcon = new St.Icon({icon_name: 'input-mouse-symbolic', icon_size: 18});
         this._modeButton = button(this._modeIcon, 'Point / Draw mode (hold Alt to interact)', () =>
@@ -288,6 +307,45 @@ export default class TinyHandExtension extends Extension {
         }
         global.stage.add_child(this._inkTray);
         this._connect(this._inkTray, 'notify::width', () => this._positionToolbar());
+    }
+
+    _toolbarButton(child, description, callback, parent = this._toolbar, signals = this._signals) {
+        const actor = new St.Button({child, reactive: true, can_focus: true, track_hover: true,
+            accessible_name: description, style_class: 'button',
+            style: 'min-width: 36px; min-height: 36px; padding: 2px; border-radius: 10px;'});
+        signals.push([actor, actor.connect('clicked', callback)]);
+        signals.push([actor, actor.connect('notify::hover', () => {
+            this._hint.text = description;
+            this._hint.visible = actor.hover && this._toolbar.visible;
+            this._hint.set_position(Math.max(0, this._toolbar.x + (this._toolbar.width * this._toolbarScale - this._hint.width) / 2),
+                Math.max(0, this._toolbar.y - 42));
+        })]);
+        parent.add_child(actor);
+        return actor;
+    }
+
+    _rebuildStyleButtons() {
+        const styles = this._pinnedStyles();
+        const selected = this._config.pointer.style;
+        if (!styles.includes(selected) && Object.hasOwn(STYLE_INK, selected)) styles.push(selected);
+        const key = styles.join('|');
+        if (this._shownStyles === key) return;
+        this._shownStyles = key;
+        for (const [actor, id] of this._styleSignals) actor.disconnect(id);
+        this._styleSignals = [];
+        for (const actor of this._styleBox.get_children()) actor.destroy();
+        this._styleButtons.clear();
+        for (const style of styles) {
+            const thumbnail = style === 'laser' ? null : this._thumbnail(style);
+            const image = thumbnail
+                ? new St.Icon({gicon: new Gio.FileIcon({file: Gio.File.new_for_path(thumbnail)}), icon_size: 36})
+                : new St.Icon({icon_name: 'media-record-symbolic', icon_size: 24,
+                    style: style === 'laser' ? 'color: #ff453a;' : 'color: #c4a7ff;'});
+            const title = style[0].toUpperCase() + style.slice(1);
+            const actor = this._toolbarButton(image, title, () => this._update({pointer: {style}}),
+                this._styleBox, this._styleSignals);
+            this._styleButtons.set(style, actor);
+        }
     }
 
     _thumbnail(style) {
@@ -325,8 +383,12 @@ export default class TinyHandExtension extends Extension {
     }
 
     _overControls(x, y) {
-        return [this._toolbar, this._inkTray].some(actor => actor?.visible &&
-            x >= actor.x && y >= actor.y && x <= actor.x + actor.width && y <= actor.y + actor.height);
+        return [this._toolbar, this._inkTray].some(actor => {
+            if (!actor?.visible) return false;
+            const [left, top] = actor.get_transformed_position();
+            const [width, height] = actor.get_transformed_size();
+            return x >= left && y >= top && x <= left + width && y <= top + height;
+        });
     }
 
     _getCursorTracker() {
@@ -359,10 +421,20 @@ export default class TinyHandExtension extends Extension {
     }
 
     _positionToolbar() {
-        this._toolbar.set_position(Math.max(0, (global.stage.width - this._toolbar.width) / 2),
-            Math.max(0, global.stage.height - 70));
-        if (this._inkTray) this._inkTray.set_position(Math.max(0, this._toolbar.x + (this._toolbar.width - this._inkTray.width) / 2),
-            Math.max(0, this._toolbar.y - 62));
+        const monitor = Main.layoutManager.primaryMonitor ??
+            {x: 0, y: 0, width: global.stage.width, height: global.stage.height};
+        const workspace = global.workspace_manager?.get_active_workspace();
+        const area = Number.isInteger(monitor.index)
+            ? workspace?.get_work_area_for_monitor(monitor.index) ?? monitor : monitor;
+        this._toolbarScale = Math.min(1, Math.max(1, area.width - 24) / Math.max(1, this._toolbar.width));
+        this._toolbar.set_scale(this._toolbarScale, this._toolbarScale);
+        this._toolbar.set_position(area.x + Math.max(0, (area.width - this._toolbar.width * this._toolbarScale) / 2),
+            area.y + Math.max(0, area.height - this._toolbar.height * this._toolbarScale - 16));
+        if (this._inkTray) {
+            this._inkTray.set_scale(this._toolbarScale, this._toolbarScale);
+            this._inkTray.set_position(area.x + Math.max(0, (area.width - this._inkTray.width * this._toolbarScale) / 2),
+                Math.max(area.y, this._toolbar.y - this._inkTray.height * this._toolbarScale - 8));
+        }
     }
 
     _resize() {
@@ -372,6 +444,7 @@ export default class TinyHandExtension extends Extension {
     }
 
     _visibility() {
+        this._rebuildStyleButtons();
         this._area.visible = this._config.enabled;
         if (!this._config.enabled) {
             this._area.reactive = false;
@@ -719,6 +792,9 @@ export default class TinyHandExtension extends Extension {
         this._soundCancellable = null;
         for (const id of this._sources ?? []) GLib.source_remove(id);
         this._sources?.clear();
+        this._reloadSource = 0;
+        for (const [object_, id] of this._styleSignals ?? []) object_.disconnect(id);
+        this._styleSignals = null;
         for (const [object_, id] of this._signals ?? []) object_.disconnect(id);
         this._signals = null;
         this._monitor?.cancel();
@@ -738,6 +814,8 @@ export default class TinyHandExtension extends Extension {
         this._inkTray = null;
         this._hint = null;
         this._styleButtons = null;
+        this._styleBox = null;
+        this._shownStyles = null;
         this._settings = null;
         this._bindingSettings = null;
         this._assets = null;

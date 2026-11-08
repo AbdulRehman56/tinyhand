@@ -26,7 +26,7 @@ For packages that need no Cargo, see the fork's [releases](https://github.com/Ab
 
 ## Usage
 
-- Open **TinyHand Settings** from your app launcher, run `tinyhand-settings`, or use the toolbar gear. The macOS-inspired sidebar has a visual picker for all 37 pointers plus appearance, drawing, and sound controls. Changes apply immediately; no JSON editing needed. Settings requires GJS, GTK 4.8+, and libadwaita 1.4+.
+- Open **TinyHand Settings** from your app launcher, run `tinyhand-settings`, or use the toolbar gear. The macOS-inspired sidebar has a searchable visual picker for all 37 pointers plus appearance, drawing, and sound controls. Pin up to six hands to the toolbar; selecting an unpinned hand keeps it accessible as an extra toolbar item. Changes apply immediately; no JSON editing needed. Settings requires GJS, GTK 4.8+, and libadwaita 1.4+.
 - `tinyhand` — run the app (needs X11; with `WAYLAND_DISPLAY` set it warns and explains).
 - Hotkeys in both modes: Ctrl+Alt+H toggle · Ctrl+Alt+X clear ink · Ctrl+Alt+P next hand.
 - `tinyhand --selftest` renders sample poses to `/tmp/tinyhand-selftest/*.png` (checks assets and fingertip accuracy); `tinyhand --config` prints the config path; `tinyhand --help` shows help.
@@ -55,6 +55,7 @@ Config is shared by both apps and hot-reloads on save.
 | `pointer.style` | `lavender`, `glove`, `coral`, `plush`, `robot`, `pink`, `blue`, `mint`, `lemon`, `black`, `chrome`, `holo`, `fuzzy`, `wood`, `marble`, `terrazzo`, `glass`, `jelly`, `pastel`, `pixel`, `lowpoly`, `knit`, `skeleton`, `astro`, `space`, `monster`, `water`, `lava`, `grass`, `cactus`, `choco`, `cloud`, `mech`, `neon`, `leaf`, `cookie`, or `laser` |
 | `pointer.size` | Hand size as a fraction of screen height, `0.08`–`0.20` (default `0.13`). |
 | `pointer.shadow` | Boolean. |
+| `toolbar.pinnedStyles` | GNOME only: an ordered array of up to six style IDs; duplicates and unknown IDs are ignored. An empty array hides favorites; the selected pointer stays visible. |
 | `interaction.mode`, `interaction.hideCursor` | GNOME only: `point` (default, normal clicks/no ink) or `draw` (captures drags); hide the system cursor by default. Cursor visibility is restored when TinyHand is disabled. |
 | `ink.choice` | `match` (each hand's matching color), or `red` / `orange` / `yellow` / `green` / `blue` / `purple` / `white` / `black`. |
 | `ink.fade` | Seconds; `0` keeps strokes until cleared. |
@@ -70,7 +71,7 @@ Config is shared by both apps and hot-reloads on save.
 - The tray icon needs an AppIndicator extension (for example, dash-to-panel with appindicator).
 - X11 tap sounds and preferences sound previews use `paplay` (PulseAudio/PipeWire); Shell taps use GNOME's sound player.
 - If assets are missing, run `linux/scripts/install.sh`, or run from the repo root (the app also looks in ancestor `assets/` directories).
-- Config saves hot-reload. Cycling selects five pinned hands and laser; select any of the other 31 hands using `pointer.style`.
+- Config saves hot-reload. GNOME cycling follows your pinned favorites (or the default six if none are pinned); the X11 app still uses its default favorites.
 - GNOME currently uses the whole stage for sizing/anchoring; mixed-scale and multi-monitor layouts need testing. The minimum rod length can offset the fingertip near the bottom-right corner. Very quick clicks can be missed by pointer polling.
 - To disable on GNOME: `gnome-extensions disable tinyhand@abdulrehmankhan56`. To remove installed files: `./linux/scripts/install.sh --uninstall` (keeps config; add `--purge` to remove it).
 

@@ -84,9 +84,10 @@ into Shell code. Preferences previews and X11 audio may still require `paplay`.
 The prepared publication can be run with `./linux/scripts/publish.sh` from a
 `linux-port` checkout with an authenticated GitHub CLI and a writable `.git` directory.
 It commits only the listed publication files, refuses unrelated or staged changes,
-prepares an upstream branch with a minimal root README addition, pushes both branches,
-sets the fork's default branch, opens the upstream draft PR, and waits for the release
-workflow. It leaves an existing release unchanged. The tag comes from `linux/VERSION`
+sets the fork's default branch and waits for the release workflow. Upstream PR work
+is paused: no upstream branch or draft is changed unless `--upstream-pr` is explicitly
+requested. That opt-in prepares/pushes the upstream branch and opens a draft PR.
+The script leaves an existing release unchanged. The tag comes from `linux/VERSION`
 with a `v` prefix. GNOME's human-readable `version-name` permits only letters,
 digits, spaces and dots, not semver hyphens. Update `linux/VERSION`, that display
 field, the integer extension version, and release notes together for each follow-up. The workflow builds
