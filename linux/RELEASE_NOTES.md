@@ -1,13 +1,23 @@
 # Linux release notes
 
-## v1.0.2-linux.1 — experimental prerelease
+## v1.0.2-linux.2 — GNOME submission compatibility
+
+- Separate the human-readable GNOME version (`1.0.2 Linux 2`) from the GitHub
+  prerelease tag in `linux/VERSION`. GNOME rejects hyphens in its version-name field.
+- Packaging and regression checks now enforce the store's version-name character set.
+- No runtime behavior changes. The earlier `v1.0.2-linux.1` artifacts remain unchanged.
+- Submitted to [GNOME Extensions](https://extensions.gnome.org/extension/11682/tinyhand-for-gnome/),
+  [review 78099](https://extensions.gnome.org/review/78099). Status at submission: **Unreviewed**,
+  not approved. Store download/install availability depends on GNOME review.
+
+## v1.0.2-linux.1 — initial experimental prerelease
 
 Check the fork's [releases page](https://github.com/AbdulRehman56/tinyhand/releases)
 for publication status and downloads. Packages comprise a self-contained GNOME extension
 ZIP, an x86_64 X11 tarball with a per-user installer, and `SHA256SUMS`. Installation
 requires no Cargo. The ZIP bundles 36 resized RGBA hands and six original sounds without
-changing source assets. The GNOME Extensions (EGO) listing is **not submitted or approved**;
-maintainer upload is pending.
+changing source assets. The follow-up `v1.0.2-linux.2` was submitted to GNOME Extensions;
+see its review status above. Submission is not approval.
 
 GitHub Actions builds the X11 binary on Ubuntu 24.04 (glibc 2.39). Check the included
 `BUILD-INFO.txt` for the actual build host and architecture. Older glibc systems should

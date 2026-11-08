@@ -110,7 +110,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          release_tag="v$(python3 -c 'import json; print(json.load(open("linux/companion/tinyhand@abdulrehmankhan56/metadata.json"))["version-name"])')"
+          release_tag="v$(cat linux/VERSION)"
           [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-linux\.[0-9]+$ ]]
           if gh release view "$release_tag" >/dev/null 2>&1; then
             echo "Release already exists; leaving its tag and artifacts unchanged."

@@ -22,7 +22,7 @@ command -v gh >/dev/null || { printf 'Install GitHub CLI and run gh auth login f
 for dependency in python3 tar; do command -v "$dependency" >/dev/null; done
 [[ $(git branch --show-current) == linux-port ]] || { printf 'Run from the linux-port branch.\n' >&2; exit 1; }
 reviewed_files=(
-  README.md linux/.gitignore linux/README.md linux/CONTRIBUTING.md linux/COMPATIBILITY.md
+  README.md linux/.gitignore linux/README.md linux/CONTRIBUTING.md linux/COMPATIBILITY.md linux/VERSION
   linux/RELEASE_NOTES.md linux/UPSTREAM_PR.md linux/src/config.rs
   linux/companion/tinyhand@abdulrehmankhan56/extension.js
   linux/companion/tinyhand@abdulrehmankhan56/metadata.json
@@ -126,6 +126,6 @@ if ! run_id=$(find_run); then
   fi
 fi
 gh run watch "$run_id" --repo AbdulRehman56/tinyhand --exit-status
-release_tag="v$(python3 -c 'import json; print(json.load(open("linux/companion/tinyhand@abdulrehmankhan56/metadata.json"))["version-name"])')"
+release_tag="v$(cat linux/VERSION)"
 gh release view "$release_tag" --repo AbdulRehman56/tinyhand --json url --jq .url
-printf 'GNOME listing still needs a maintainer upload of the extension ZIP.\n'
+printf 'GNOME listing/review: https://extensions.gnome.org/extension/11682/tinyhand-for-gnome/ (check approval status separately).\n'

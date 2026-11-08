@@ -26,6 +26,7 @@ test('metadata uses the GNOME integer version format', () => {
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'metadata.json')));
     assert.equal(Number.isInteger(metadata.version), true);
     assert.ok(metadata['shell-version'].includes('50'));
+    assert.match(metadata['version-name'], /^[A-Za-z0-9. ]+$/, 'GNOME store rejects hyphenated version names');
 });
 
 test('Shell entry point never imports GTK libraries', () => {

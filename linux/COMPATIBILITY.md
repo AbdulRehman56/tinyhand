@@ -71,7 +71,7 @@ assumed compatible with older Shell preferences hosts.
   it needs neither the Rust binary nor a separately cloned source/assets tree.
 - Release tags and assets are immutable in the publication workflow. For a
   compatibility change after publication, increment the extension integer/version
-  name and release tag, update notes, and publish a new prerelease. Never silently
+  name and `linux/VERSION` release tag, update notes, and publish a new prerelease. Never silently
   replace an existing tag's assets.
 - Before promoting an older GNOME version from experimental, test enable/disable,
   Point/Draw, Alt pass-through, cursor restoration, shortcuts, audio and settings
