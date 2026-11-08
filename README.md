@@ -33,6 +33,19 @@ Open `TinyHand.dmg`, drag TinyHand to Applications and allow **Accessibility** w
 While the pointer is on, a small toolbar at the bottom of the screen lets you pick one of
 36 hands or a laser dot, mute the tap sound, or exit.
 
+## Experimental Linux port
+
+An optional Linux implementation is available in [linux/](./linux/README.md):
+a GNOME Shell 45–50 companion for Wayland and a Rust X11 app, with visual settings
+and per-user installation. GNOME 45–49 are experimental (API/mocks only); 50.1 is
+the only desktop-tested version. Settings need GTK 4.8+ and libadwaita 1.4+.
+See the compatibility assessment for limits; full macOS parity remains incomplete.
+
+TinyHand's original app, concept, artwork and sounds are by
+[Kamran Ahmed (@nilbuild)](https://github.com/nilbuild). The independent Linux
+port is maintained by [AbdulRehman56](https://github.com/AbdulRehman56).
+See the [Linux guide](./linux/README.md) for installation, packaging and known gaps.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

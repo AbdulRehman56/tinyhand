@@ -1,0 +1,124 @@
+name: Linux
+
+on:
+  push:
+    branches: [linux-port]
+  pull_request:
+    paths:
+      - 'linux/**'
+      - 'assets/**'
+      - '.github/workflows/linux.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install packaging and verification dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-pil libglib2.0-bin gjs gir1.2-gtk-4.0 gir1.2-adw-1 xvfb dbus-x11
+      - name: Check Rust
+        run: cargo check --manifest-path linux/Cargo.toml --locked
+      - name: Test Rust
+        run: cargo test --manifest-path linux/Cargo.toml --locked
+      - name: Test companion logic
+        run: node linux/tests/companion.test.cjs
+      - name: Validate JavaScript and shell syntax
+        shell: bash
+        run: |
+          for file in linux/companion/tinyhand@abdulrehmankhan56/*.js; do
+            node --input-type=module --check < "$file"
+          done
+          bash -n linux/scripts/*.sh
+          glib-compile-schemas --strict --dry-run linux/companion/tinyhand@abdulrehmankhan56/schemas
+      - name: Package Linux releases
+        run: ./linux/scripts/package.sh
+      - name: Verify repeatable extension packaging
+        shell: bash
+        run: |
+          zip_path=linux/dist/tinyhand@abdulrehmankhan56.shell-extension.zip
+          before=$(sha256sum "$zip_path")
+          ./linux/scripts/package.sh --extension-only
+          test "$(sha256sum "$zip_path")" = "$before"
+      - name: Verify rendering and preferences
+        shell: bash
+        run: |
+          cargo run --manifest-path linux/Cargo.toml --locked -- --selftest
+          extension_dir=$(mktemp -d)
+          unzip -q linux/dist/tinyhand@abdulrehmankhan56.shell-extension.zip -d "$extension_dir"
+          gjs -m linux/tests/companion-render.mjs "$PWD" "$extension_dir"
+          test_config=$(mktemp -d -t tinyhand-layout.XXXXXX)
+          XDG_CONFIG_HOME="$test_config" xvfb-run -a dbus-run-session -- gjs -m linux/tests/preferences-layout.mjs
+      - name: Verify bundle install and uninstall
+        shell: bash
+        run: |
+          test_dir=$(mktemp -d)
+          tar -xzf linux/dist/tinyhand-linux-x86_64.tar.gz -C "$test_dir"
+          bundle="$test_dir/tinyhand-linux-x86_64"
+          test_home="$test_dir/home with spaces"
+          mkdir -p "$test_home/.config/tinyhand" "$test_home/.local/share/gnome-shell/extensions"
+          echo preserved > "$test_home/.config/tinyhand/config.json"
+          echo preserved > "$test_home/.local/share/gnome-shell/extensions/sentinel"
+          HOME="$test_home" "$bundle/install.sh"
+          "$test_home/.local/bin/tinyhand" --version
+          test -x "$test_home/.local/bin/tinyhand-settings"
+          test -f "$test_home/.local/share/tinyhand/assets/hand_lavender.png"
+          HOME="$test_home" "$bundle/install.sh" --uninstall
+          test ! -e "$test_home/.local/bin/tinyhand"
+          test ! -e "$test_home/.local/share/tinyhand"
+          test "$(cat "$test_home/.config/tinyhand/config.json")" = preserved
+          test "$(cat "$test_home/.local/share/gnome-shell/extensions/sentinel")" = preserved
+      - name: Generate checksums
+        working-directory: linux/dist
+        run: sha256sum *.zip *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinyhand-linux
+          path: |
+            linux/dist/*.zip
+            linux/dist/*.tar.gz
+            linux/dist/SHA256SUMS
+          if-no-files-found: error
+
+  publish-prerelease:
+    if: github.repository == 'AbdulRehman56/tinyhand' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/linux-port'
+    needs: check-and-package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: tinyhand-linux-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tinyhand-linux
+          path: linux/dist
+      - name: Publish versioned Linux prerelease once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          release_tag="v$(python3 -c 'import json; print(json.load(open("linux/companion/tinyhand@abdulrehmankhan56/metadata.json"))["version-name"])')"
+          [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-linux\.[0-9]+$ ]]
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            echo "Release already exists; leaving its tag and artifacts unchanged."
+            exit 0
+          fi
+          (cd linux/dist && sha256sum --check SHA256SUMS)
+          gh release create "$release_tag" \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "TinyHand for Linux $release_tag (experimental)" \
+            --notes-file linux/RELEASE_NOTES.md \
+            linux/dist/*.zip linux/dist/*.tar.gz linux/dist/SHA256SUMS
