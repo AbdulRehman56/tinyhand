@@ -31,7 +31,7 @@ The Rust X11 app is also experimental.
 The GNOME Extensions (EGO) listing is **not submitted or approved**. The extension ZIP
 is ready for maintainer upload.
 Check [releases](https://github.com/AbdulRehman56/tinyhand/releases) for published
-packages. The `v1.0.2-linux.1` prerelease pipeline builds a self-contained extension ZIP
+packages. The prerelease pipeline builds a self-contained extension ZIP
 and an x86_64 X11 tarball with an installer that needs no Cargo, plus SHA-256 checksums.
 
 For the extension ZIP, run `gnome-extensions install --force PATH_TO_ZIP`, then enable

@@ -1,6 +1,13 @@
 # Linux release notes
 
-## v1.0.2-linux.1 — experimental prerelease
+## v1.0.2-linux.2 — GNOME submission compatibility
+
+- Separate the human-readable GNOME version (`1.0.2 Linux 2`) from the GitHub
+  prerelease tag in `linux/VERSION`. GNOME rejects hyphens in its version-name field.
+- Packaging and regression checks now enforce the store's version-name character set.
+- No runtime behavior changes. The earlier `v1.0.2-linux.1` artifacts remain unchanged.
+
+## v1.0.2-linux.1 — initial experimental prerelease
 
 Check the fork's [releases page](https://github.com/AbdulRehman56/tinyhand/releases)
 for publication status and downloads. Packages comprise a self-contained GNOME extension

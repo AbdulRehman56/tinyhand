@@ -75,7 +75,7 @@ remain the original project's decision.
 
 Keep [release notes](./RELEASE_NOTES.md) accurate and preserve attribution in every artifact.
 Verify install/uninstall in a clean per-user environment before publishing packages.
-The initial prerelease tag is `v1.0.2-linux.1`; the extension ZIP and Linux tarball
+The initial prerelease tag was `v1.0.2-linux.1`; the extension ZIP and Linux tarball
 installer must be built and checked before being advertised as downloadable. The ZIP
 should be self-contained, with resized alpha artwork for Shell rendering; leave source
 artwork unchanged. The portable tarball installer should not require Cargo.
@@ -86,9 +86,10 @@ The prepared publication can be run with `./linux/scripts/publish.sh` from a
 It commits only the listed publication files, refuses unrelated or staged changes,
 prepares an upstream branch with a minimal root README addition, pushes both branches,
 sets the fork's default branch, opens the upstream draft PR, and waits for the release
-workflow. It leaves an existing release unchanged. The tag comes from metadata's
-`version-name` with a `v` prefix; update that field, the integer extension version,
-and release notes together for each follow-up. The workflow builds
+workflow. It leaves an existing release unchanged. The tag comes from `linux/VERSION`
+with a `v` prefix. GNOME's human-readable `version-name` permits only letters,
+digits, spaces and dots, not semver hyphens. Update `linux/VERSION`, that display
+field, the integer extension version, and release notes together for each follow-up. The workflow builds
 on Ubuntu 24.04 and only publishes after its verification job succeeds.
 The GNOME Extensions listing is not submitted; maintainer upload is pending:
 do not add a published/approved badge or claim availability before approval and publication.

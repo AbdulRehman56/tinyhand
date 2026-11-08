@@ -38,6 +38,12 @@ for dep in python3 glib-compile-schemas; do
   command -v "$dep" >/dev/null || { printf 'Missing build dependency: %s\n' "$dep" >&2; exit 1; }
 done
 python3 -c 'from PIL import Image' || { printf 'Install Pillow: python3 -m pip install Pillow\n' >&2; exit 1; }
+python3 - "$EXTENSION_SRC/metadata.json" <<'PY'
+import json, re, sys
+metadata = json.load(open(sys.argv[1]))
+if not re.fullmatch(r'[A-Za-z0-9. ]+', metadata.get('version-name', '')):
+    raise SystemExit('GNOME version-name must contain only ASCII letters, digits, spaces and dots')
+PY
 if ! $extension_only; then
   [[ $(uname -s) == Linux ]] || { printf 'Build portable bundles on Linux.\n' >&2; exit 1; }
   command -v cargo >/dev/null || { printf 'Missing build dependency: cargo\n' >&2; exit 1; }
