@@ -95,8 +95,8 @@ git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push --
   linux-port:refs/heads/linux-port linux-port-upstream:refs/heads/linux-port-upstream
 gh repo edit AbdulRehman56/tinyhand --default-branch linux-port \
   --description 'Independent Linux port of TinyHand by Kamran Ahmed (@nilbuild). GNOME 45-50 (45-49 experimental) and X11.'
-pr_url=$(gh pr list --repo nilbuild/tinyhand --state open \
-  --head AbdulRehman56:linux-port-upstream --json url --jq '.[0].url // empty')
+pr_url=$(gh api 'repos/nilbuild/tinyhand/pulls?state=open&head=AbdulRehman56%3Alinux-port-upstream' \
+  --jq '.[0].html_url // empty')
 if [[ -z "$pr_url" ]]; then
   pr_url=$(gh pr create --repo nilbuild/tinyhand --base main \
     --head AbdulRehman56:linux-port-upstream --draft \
