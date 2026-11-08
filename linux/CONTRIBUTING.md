@@ -91,5 +91,6 @@ with a `v` prefix. GNOME's human-readable `version-name` permits only letters,
 digits, spaces and dots, not semver hyphens. Update `linux/VERSION`, that display
 field, the integer extension version, and release notes together for each follow-up. The workflow builds
 on Ubuntu 24.04 and only publishes after its verification job succeeds.
-The GNOME Extensions listing is not submitted; maintainer upload is pending:
-do not add a published/approved badge or claim availability before approval and publication.
+The [GNOME Extensions listing](https://extensions.gnome.org/extension/11682/tinyhand-for-gnome/)
+is submitted and awaiting review. Do not add an approved badge or claim store
+installation availability before approval and publication.

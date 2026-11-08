@@ -128,4 +128,4 @@ fi
 gh run watch "$run_id" --repo AbdulRehman56/tinyhand --exit-status
 release_tag="v$(cat linux/VERSION)"
 gh release view "$release_tag" --repo AbdulRehman56/tinyhand --json url --jq .url
-printf 'GNOME listing still needs a maintainer upload of the extension ZIP.\n'
+printf 'GNOME listing/review: https://extensions.gnome.org/extension/11682/tinyhand-for-gnome/ (check approval status separately).\n'
