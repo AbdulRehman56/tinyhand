@@ -185,8 +185,7 @@ pub fn save(cfg: &Config) {
     }
 }
 
-fn find_asset_dir(name: &str) -> Option<PathBuf> {
-    let rel = format!("{name}.png");
+fn find_asset_dir(relative_path: &str) -> Option<PathBuf> {
     let mut candidates = Vec::new();
     let mut dirs = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
@@ -217,7 +216,7 @@ fn find_asset_dir(name: &str) -> Option<PathBuf> {
     }
     candidates.dedup();
     for dir in candidates {
-        let f = dir.join(&rel);
+        let f = dir.join(relative_path);
         if f.exists() {
             return Some(dir);
         }
@@ -228,16 +227,30 @@ fn find_asset_dir(name: &str) -> Option<PathBuf> {
 /// Resolve an asset lookup: {data_dir}/assets/<name>.png, then any `assets/`
 /// dir found walking up from the executable or CWD (dev runs from linux/ or repo root).
 pub fn resolve_asset(name: &str) -> Option<PathBuf> {
-    find_asset_dir(name).map(|d| d.join(format!("{name}.png")))
+    let relative_path = format!("{name}.png");
+    find_asset_dir(&relative_path).map(|d| d.join(relative_path))
 }
 
 pub fn resolve_sound(tap: &str) -> Option<PathBuf> {
-    resolve_asset(&format!("sounds/tap_{tap}")).or_else(|| resolve_asset(&format!("tap_{tap}")))
+    [format!("sounds/tap_{tap}.wav"), format!("tap_{tap}.wav")]
+        .into_iter()
+        .find_map(|relative_path| find_asset_dir(&relative_path).map(|d| d.join(relative_path)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_tap_sounds_resolve_to_wav_files() {
+        for tap in ["thock", "click", "pop", "wood", "boop", "squeak"] {
+            let path = resolve_sound(tap).unwrap_or_else(|| panic!("Missing tap sound: {tap}"));
+            assert_eq!(path.extension().unwrap(), "wav");
+            assert!(path.is_file());
+        }
+        assert!(resolve_asset("hand_lavender").unwrap().is_file());
+        assert!(resolve_sound("nonexistent").is_none());
+    }
 
     #[test]
     fn defaults_are_created_only_when_absent() {

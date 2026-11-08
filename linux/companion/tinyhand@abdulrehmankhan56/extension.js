@@ -5,7 +5,6 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
 import GdkPixbuf from 'gi://GdkPixbuf';
-import Gdk from 'gi://Gdk?version=4.0';
 import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
 // Cairo is a built-in GJS module, not a GI typelib.
@@ -89,8 +88,10 @@ export default class TinyHandExtension extends Extension {
         this._held = false;
         this._dirty = true;
         this._running = true;
-        this._cursorTracker = global.backend.get_cursor_tracker();
+        this._cursorTracker = this._getCursorTracker();
         this._cursorHidden = false;
+        this._cursorWasVisible = null;
+        this._soundCancellable = new Gio.Cancellable();
         this._configPath = GLib.build_filenamev([GLib.get_user_config_dir(), 'tinyhand', 'config.json']);
         this._geometryPath = GLib.build_filenamev([GLib.get_user_cache_dir(), 'tinyhand', 'hand-geometry.json']);
         this._geometry = readJson(this._geometryPath);
@@ -192,7 +193,8 @@ export default class TinyHandExtension extends Extension {
     }
 
     _findAssets() {
-        const candidates = [GLib.build_filenamev([GLib.get_user_data_dir(), 'tinyhand', 'assets'])];
+        const candidates = [GLib.build_filenamev([this.path, 'assets']),
+            GLib.build_filenamev([GLib.get_user_data_dir(), 'tinyhand', 'assets'])];
         let dir = this.path;
         while (dir) {
             candidates.push(GLib.build_filenamev([dir, 'assets']));
@@ -316,8 +318,7 @@ export default class TinyHandExtension extends Extension {
 
     _openSettings() {
         try {
-            const script = GLib.build_filenamev([GLib.get_user_data_dir(), 'tinyhand', 'settings', 'settings.js']);
-            Gio.Subprocess.new(['gjs', '-m', script], Gio.SubprocessFlags.NONE);
+            this.openPreferences();
         } catch (error) {
             console.warn(`TinyHand: cannot open settings: ${error}`);
         }
@@ -328,14 +329,29 @@ export default class TinyHandExtension extends Extension {
             x >= actor.x && y >= actor.y && x <= actor.x + actor.width && y <= actor.y + actor.height);
     }
 
+    _getCursorTracker() {
+        // Mutter 48 moved this from CursorTracker to Backend.
+        return global.backend?.get_cursor_tracker?.() ??
+            Meta.CursorTracker?.get_for_display?.(global.display) ?? null;
+    }
+
     _hideSystemCursor(hide) {
         if (hide === this._cursorHidden) return;
         const tracker = this._cursorTracker;
-        if (typeof tracker?.inhibit_cursor_visibility === 'function') {
+        if (typeof tracker?.inhibit_cursor_visibility === 'function' &&
+            typeof tracker?.uninhibit_cursor_visibility === 'function') {
             if (hide) tracker.inhibit_cursor_visibility();
             else tracker.uninhibit_cursor_visibility();
-        } else if (typeof tracker?.set_pointer_visible === 'function') {
-            tracker.set_pointer_visible(!hide);
+        } else if (typeof tracker?.set_pointer_visible === 'function' &&
+            typeof tracker?.get_pointer_visible === 'function') {
+            // Mutter 45–48 has no inhibitor. Restore the state we actually changed.
+            if (hide) {
+                this._cursorWasVisible = tracker.get_pointer_visible();
+                tracker.set_pointer_visible(false);
+            } else {
+                tracker.set_pointer_visible(this._cursorWasVisible ?? true);
+                this._cursorWasVisible = null;
+            }
         } else {
             return;
         }
@@ -411,7 +427,8 @@ export default class TinyHandExtension extends Extension {
         const overToolbar = this._overControls(x, y);
         const window = global.display.focus_window;
         const appId = window?.get_gtk_application_id?.() ?? window?.get_wm_class?.() ?? '';
-        const settingsFocused = appId.toLowerCase().includes('tinyhand');
+        const settingsFocused = appId.toLowerCase().includes('tinyhand') ||
+            (appId === 'org.gnome.Shell.Extensions' && window?.get_title?.() === 'TinyHand Settings');
         const interacting = (mods & 0x8) !== 0 || settingsFocused || Main.overview.visible;
         const drawing = this._config.interaction.mode === 'draw' && !interacting;
         // Only Draw mode becomes an input surface; Point mode remains click-through.
@@ -472,9 +489,10 @@ export default class TinyHandExtension extends Extension {
         const wav = GLib.build_filenamev([this._assetDir, 'sounds', `tap_${tap}.wav`]);
         if (!GLib.file_test(wav, GLib.FileTest.IS_REGULAR)) return;
         try {
-            GLib.spawn_command_line_async(`paplay ${GLib.shell_quote(wav)}`);
+            global.display.get_sound_player().play_from_file(Gio.File.new_for_path(wav),
+                'TinyHand tap', this._soundCancellable);
         } catch (_) {
-            // Sound is optional (e.g. paplay may not be installed).
+            // Sound is optional if the compositor has no audio backend.
         }
     }
 
@@ -544,7 +562,8 @@ export default class TinyHandExtension extends Extension {
         let asset = null;
         try {
             if (!this._assetDir) return null;
-            const pixbuf = GdkPixbuf.Pixbuf.new_from_file(GLib.build_filenamev([this._assetDir, `hand_${style}.png`]));
+            const path = GLib.build_filenamev([this._assetDir, `hand_${style}.png`]);
+            const pixbuf = GdkPixbuf.Pixbuf.new_from_file(path);
             let g = this._geometry[style];
             if (!this._validGeometry(g)) {
                 g = this._measure(pixbuf);
@@ -554,22 +573,25 @@ export default class TinyHandExtension extends Extension {
             const top = clamp(Math.floor(g.handTop * pixbuf.height), 0, pixbuf.height - 2);
             const wrist = clamp(Math.floor(g.wrist * pixbuf.height), top + 1, pixbuf.height - 1);
             const end = clamp(Math.floor(g.rodEnd * pixbuf.height), wrist + 1, pixbuf.height);
-            // Construct immutable black RGBA storage once; keep GLib.Bytes alive with its pixbuf.
-            const source = pixbuf.get_pixels();
-            const black = new Uint8Array(pixbuf.width * pixbuf.height * 4);
-            for (let y = 0; y < pixbuf.height; y++) {
-                for (let x = 0; x < pixbuf.width; x++) {
-                    black[(y * pixbuf.width + x) * 4 + 3] = pixbuf.has_alpha
-                        ? source[y * pixbuf.rowstride + x * pixbuf.n_channels + pixbuf.n_channels - 1] : 255;
+            // Cairo loads PNGs directly. Never import Gdk/Gtk/Adw into Shell.
+            const source = cairo.ImageSurface.createFromPNG(path);
+            const surface = (y, height, shadow = false) => {
+                const image = new cairo.ImageSurface(cairo.Format.ARGB32, pixbuf.width, height);
+                const cr = new cairo.Context(image);
+                if (shadow) {
+                    cr.setSourceRGBA(0, 0, 0, 1);
+                    cr.maskSurface(source, 0, -y);
+                } else {
+                    cr.setSourceSurface(source, 0, -y);
+                    cr.paint();
                 }
-            }
-            const bytes = new GLib.Bytes(black);
-            const shadow = GdkPixbuf.Pixbuf.new_from_bytes(bytes, GdkPixbuf.Colorspace.RGB, true,
-                8, pixbuf.width, pixbuf.height, pixbuf.width * 4);
+                cr.$dispose();
+                return image;
+            };
             const slice = (image, y, height) => image.new_subpixbuf(0, y, image.width, height);
             asset = {g, width: pixbuf.width, hand: slice(pixbuf, top, wrist - top),
-                rod: slice(pixbuf, wrist, end - wrist), shadowHand: slice(shadow, top, wrist - top),
-                shadowRod: slice(shadow, wrist, end - wrist), bytes};
+                surfaceHand: surface(top, wrist - top), surfaceRod: surface(wrist, end - wrist),
+                shadowHand: surface(top, wrist - top, true), shadowRod: surface(wrist, end - wrist, true)};
         } catch (error) {
             console.warn(`TinyHand: cannot load hand ${style}: ${error}`);
         }
@@ -671,8 +693,8 @@ export default class TinyHandExtension extends Extension {
             for (const [image, y, height] of [[rod, -rodLen, rodLen], [hand, -rodLen - handPts, handPts]]) {
                 cr.save();
                 cr.translate(-g.rodX * widthPts, y);
-                cr.scale(widthPts / asset.width, height / image.height);
-                Gdk.cairo_set_source_pixbuf(cr, image, 0, 0);
+                cr.scale(widthPts / asset.width, height / image.getHeight());
+                cr.setSourceSurface(image, 0, 0);
                 cr.paintWithAlpha(alpha);
                 cr.restore();
             }
@@ -685,13 +707,16 @@ export default class TinyHandExtension extends Extension {
             const sy = lift * 0.6 * Math.sin(angle) + lift * Math.cos(angle);
             draw(asset.shadowHand, asset.shadowRod, 0.26 + 0.02 * this._press, sx, sy);
         }
-        draw(asset.hand, asset.rod, 1);
+        draw(asset.surfaceHand, asset.surfaceRod, 1);
     }
 
     disable() {
         this._running = false;
         this._hideSystemCursor(false);
         this._cursorTracker = null;
+        this._cursorWasVisible = null;
+        this._soundCancellable?.cancel();
+        this._soundCancellable = null;
         for (const id of this._sources ?? []) GLib.source_remove(id);
         this._sources?.clear();
         for (const [object_, id] of this._signals ?? []) object_.disconnect(id);

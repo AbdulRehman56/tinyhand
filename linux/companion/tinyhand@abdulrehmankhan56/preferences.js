@@ -40,7 +40,8 @@ function merge(base, patch) {
 }
 
 function findAssets(assetDir) {
-    const candidates = assetDir ? [assetDir] : [];
+    const bundled = Gio.File.new_for_uri(import.meta.url).get_parent().get_child('assets').get_path();
+    const candidates = assetDir ? [assetDir, bundled] : [bundled];
     candidates.push(GLib.build_filenamev([GLib.get_user_data_dir(), 'tinyhand', 'assets']));
     let dir = Gio.File.new_for_uri(import.meta.url).get_parent();
     while (dir) {
@@ -86,6 +87,8 @@ function handTexture(path) {
  * @param {string|null} assetDir optional assets directory
  */
 export function buildPreferences(window, assetDir = null) {
+    if (Gtk.check_version(4, 8, 0) || typeof Adw.SwitchRow !== 'function')
+        throw new Error('TinyHand Settings requires GTK 4.8 or later and libadwaita 1.4 or later.');
     const assets = findAssets(assetDir);
     const directory = GLib.build_filenamev([GLib.get_user_config_dir(), 'tinyhand']);
     const file = Gio.File.new_for_path(GLib.build_filenamev([directory, 'config.json']));

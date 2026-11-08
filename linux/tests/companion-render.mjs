@@ -3,20 +3,21 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GdkPixbuf from 'gi://GdkPixbuf';
-import Gdk from 'gi://Gdk?version=4.0';
 import cairo from 'cairo';
 
 const root = ARGV[0] ?? GLib.get_current_dir();
-const sourcePath = `${root}/linux/companion/tinyhand@abdulrehmankhan56/extension.js`;
+const extensionRoot = ARGV[1] ?? `${root}/linux/companion/tinyhand@abdulrehmankhan56`;
+const assetsRoot = ARGV[1] ? `${extensionRoot}/assets` : `${root}/assets`;
+const sourcePath = `${extensionRoot}/extension.js`;
 const [, bytes] = GLib.file_get_contents(sourcePath);
 const source = new TextDecoder().decode(bytes)
     .replace(/^import .*;\n/gm, '')
     .replace('export default class TinyHandExtension', 'class TinyHandExtension');
 const stage = {width: 1920, height: 1080};
-const TinyHand = new Function('Extension', 'GLib', 'Gio', 'GdkPixbuf', 'Gdk', 'cairo', 'global',
-    `${source}\nreturn TinyHandExtension;`)(class {}, GLib, Gio, GdkPixbuf, Gdk, cairo, {stage});
+const TinyHand = new Function('Extension', 'GLib', 'Gio', 'GdkPixbuf', 'cairo', 'global',
+    `${source}\nreturn TinyHandExtension;`)(class {}, GLib, Gio, GdkPixbuf, cairo, {stage});
 const ext = new TinyHand();
-ext._assetDir = `${root}/assets`;
+ext._assetDir = assetsRoot;
 ext._assets = new Map();
 ext._geometry = {};
 // Cache writes are optional; keep this test from changing the user's config/cache.
@@ -29,7 +30,7 @@ ext._active = null;
 ext._strokes = [{points: [[100, 100], [200, 150], [300, 120]], color: [1, 0, 0],
     start: GLib.get_monotonic_time() / 1e6}];
 
-const [, files] = GLib.spawn_sync(null, ['find', `${root}/assets`, '-maxdepth', '1', '-name', 'hand_*.png'],
+const [, files] = GLib.spawn_sync(null, ['find', assetsRoot, '-maxdepth', '1', '-name', 'hand_*.png'],
     null, GLib.SpawnFlags.SEARCH_PATH, null);
 const styles = new TextDecoder().decode(files).trim().split('\n')
     .map(path => GLib.path_get_basename(path).replace(/^hand_|\.png$/g, ''));

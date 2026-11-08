@@ -7,9 +7,9 @@ TinyHand is a tiny hand on a stick that points at things on your screen: click t
 | Session | Mode |
 | --- | --- |
 | Xorg/X11 | The Rust app, `tinyhand`, hides the real cursor, swallows clicks for tapping/drawing, lets panels/dock areas pass through, and provides a StatusNotifier tray menu (toggle / next hand / clear / quit). Hold Alt to interact normally. |
-| GNOME Wayland (45–50) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. |
+| GNOME Wayland (45–50; 45–49 experimental) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. |
 
-Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental local-test build, not a verified parity release; live GNOME Shell interaction still needs testing.
+Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental prerelease; GNOME 50.1 is the only desktop-tested version. The latest changes have API/mocked coverage, not a fresh live Shell test. See [COMPATIBILITY.md](./COMPATIBILITY.md) for the version matrix, library minimums and testing limits.
 
 ## Install
 
@@ -20,11 +20,13 @@ Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. 
 
 Enable the extension with `gnome-extensions enable tinyhand@abdulrehmankhan56` or use the Extensions app. If it does not show up, log out and back in once.
 
-Rust/Cargo is needed to build the X11 app; no system development headers are required. The companion uses the GJS/GDK libraries shipped with GNOME. Installation stays under your home directory and does not enable the extension automatically.
+Rust/Cargo is needed to build the X11 app; no system development headers are required. The companion uses GJS, Cairo and GdkPixbuf shipped with GNOME; Shell code does not import Gdk, Gtk or Adw. Preferences run separately with GTK4/libadwaita. Installation stays under your home directory and does not enable the extension automatically.
+
+For packages that need no Cargo, see the fork's [releases](https://github.com/AbdulRehman56/tinyhand/releases). Build the self-contained extension ZIP and portable X11 tarball with `./linux/scripts/package.sh`, or use `--extension-only` to skip Rust. Packaging needs Python 3 with Pillow and `glib-compile-schemas`. Source artwork remains unchanged; packages contain resized RGBA copies. Check the tarball's `BUILD-INFO.txt` for architecture and glibc requirements.
 
 ## Usage
 
-- Open **TinyHand Settings** from your app launcher, run `tinyhand-settings`, or use the toolbar gear. The macOS-inspired sidebar has a visual picker for all 37 pointers plus appearance, drawing, and sound controls. Changes apply immediately; no JSON editing needed. Settings requires GJS, GTK4, and libadwaita (provided by modern GNOME desktops).
+- Open **TinyHand Settings** from your app launcher, run `tinyhand-settings`, or use the toolbar gear. The macOS-inspired sidebar has a visual picker for all 37 pointers plus appearance, drawing, and sound controls. Changes apply immediately; no JSON editing needed. Settings requires GJS, GTK 4.8+, and libadwaita 1.4+.
 - `tinyhand` — run the app (needs X11; with `WAYLAND_DISPLAY` set it warns and explains).
 - Hotkeys in both modes: Ctrl+Alt+H toggle · Ctrl+Alt+X clear ink · Ctrl+Alt+P next hand.
 - `tinyhand --selftest` renders sample poses to `/tmp/tinyhand-selftest/*.png` (checks assets and fingertip accuracy); `tinyhand --config` prints the config path; `tinyhand --help` shows help.
@@ -66,7 +68,7 @@ Config is shared by both apps and hot-reloads on save.
 - “no 32-bit RGBA visual…”: the X11 session has no compositor.
 - Running the X11 app inside Wayland only affects XWayland windows; prefer the extension there.
 - The tray icon needs an AppIndicator extension (for example, dash-to-panel with appindicator).
-- Tap sounds use `paplay` (PulseAudio/PipeWire).
+- X11 tap sounds and preferences sound previews use `paplay` (PulseAudio/PipeWire); Shell taps use GNOME's sound player.
 - If assets are missing, run `linux/scripts/install.sh`, or run from the repo root (the app also looks in ancestor `assets/` directories).
 - Config saves hot-reload. Cycling selects five pinned hands and laser; select any of the other 31 hands using `pointer.style`.
 - GNOME currently uses the whole stage for sizing/anchoring; mixed-scale and multi-monitor layouts need testing. The minimum rod length can offset the fingertip near the bottom-right corner. Very quick clicks can be missed by pointer polling.

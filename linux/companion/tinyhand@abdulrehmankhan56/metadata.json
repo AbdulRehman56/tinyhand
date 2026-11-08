@@ -1,10 +1,10 @@
 {
   "uuid": "tinyhand@abdulrehmankhan56",
-  "name": "TinyHand",
-  "description": "A tiny hand on a stick that follows your cursor, with tap sounds and fading ink. A click-through companion for GNOME on Wayland.",
+  "name": "TinyHand for GNOME",
+  "description": "A tiny hand on a stick that follows your cursor, with tap sounds, fading ink and visual settings. Point normally or capture drags in Draw mode; hold Alt to interact with apps.\n\nTargets GNOME 45–50; 45–49 are experimental (API/mocked checks only). GNOME 50.1 is the only desktop-tested version. Settings require GTK 4.8+ and libadwaita 1.4+.\n\nLinux port of TinyHand by Kamran Ahmed (@nilbuild): https://github.com/nilbuild/tinyhand. Original artwork, sounds and concept are credited to the upstream project. Linux port maintained by AbdulRehman56.",
   "url": "https://github.com/AbdulRehman56/tinyhand",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.tinyhand",
   "version": 3,
-  "version-name": "1.0.2-linux-preview.3"
+  "version-name": "1.0.2-linux.1"
 }
