@@ -58,6 +58,8 @@ for file in metadata.json extension.js prefs.js preferences.js; do
 done
 cp "$EXTENSION_SRC"/schemas/*.gschema.xml "$STAGE/extension/schemas/"
 glib-compile-schemas --strict "$STAGE/extension/schemas"
+# GNOME 45+ compiles schemas during installation; validate them here but ship XML only.
+rm -f "$STAGE/extension/schemas/gschemas.compiled"
 cp "$REPO_ROOT/LICENSE" "$STAGE/extension/LICENSE"
 cat > "$STAGE/extension/CREDITS" <<'EOF'
 TinyHand original app and hand/sound assets: Kamran Ahmed (@nilbuild).

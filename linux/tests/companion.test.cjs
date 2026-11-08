@@ -36,6 +36,30 @@ test('Shell entry point never imports GTK libraries', () => {
     assert.ok(!/from ['"]gi:\/\/(Gdk(?:[?'\"])|Gtk|Adw)/.test(rawSource));
 });
 
+test('each GSettings schema is shipped in the file named for its schema ID', () => {
+    const schemaDir = path.join(root, 'schemas');
+    for (const name of fs.readdirSync(schemaDir).filter(name => name.endsWith('.gschema.xml'))) {
+        const xml = fs.readFileSync(path.join(schemaDir, name), 'utf8');
+        const ids = [...xml.matchAll(/<schema\s+id="([^"]+)"/g)].map(match => match[1]);
+        assert.equal(ids.length, 1);
+        assert.equal(name, `${ids[0]}.gschema.xml`);
+    }
+});
+
+test('repeated runtime failures log only once per category', () => {
+    const ext = new context.TinyHand();
+    const previousConsole = context.console;
+    const messages = [];
+    try {
+        context.console = {warn: message => messages.push(message)};
+        ext._warn('paint failed', 'first');
+        ext._warn('paint failed', 'again');
+        ext._warn('update failed', 'other');
+        assert.equal(messages.length, 2);
+        assert.match(messages[0], /paint failed: first/);
+    } finally { context.console = previousConsole; }
+});
+
 test('partial config falls back safely and clamps hand size', () => {
     disk = {pointer: {size: 999}, ink: null, enabled: null, custom: 'preserve'};
     const config = new context.TinyHand()._readConfig();

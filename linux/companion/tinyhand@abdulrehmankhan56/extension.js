@@ -80,6 +80,7 @@ function writeJson(path, value) {
 export default class TinyHandExtension extends Extension {
     enable() {
         this._sources = new Set();
+        this._warningKeys = new Set();
         this._reloadSource = 0;
         this._signals = [];
         this._bound = [];
@@ -137,7 +138,7 @@ export default class TinyHandExtension extends Extension {
             }
             this._connect(this._settings, 'changed::show-toolbar', () => this._visibility());
         } catch (error) {
-            console.warn(`TinyHand: compile/install the settings schema to enable shortcuts: ${error}`);
+            this._warn('compile/install the settings schema to enable shortcuts', error);
         }
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._configPath), 0o700);
@@ -147,7 +148,7 @@ export default class TinyHandExtension extends Extension {
                 if ([file?.get_basename(), other?.get_basename()].includes('config.json')) this._queueReload();
             });
         } catch (error) {
-            console.warn(`TinyHand: cannot watch configuration: ${error}`);
+            this._warn('cannot watch configuration', error);
         }
         this._visibility();
         this._schedule(16);
@@ -155,6 +156,14 @@ export default class TinyHandExtension extends Extension {
 
     _connect(object_, signal, callback) {
         this._signals.push([object_, object_.connect(signal, callback)]);
+    }
+
+    _warn(message, error) {
+        // A recurring paint/update failure must not flood the Shell journal.
+        this._warningKeys ??= new Set();
+        if (this._warningKeys.has(message)) return;
+        this._warningKeys.add(message);
+        console.warn(`TinyHand: ${message}: ${error}`);
     }
 
     _readConfig(strict = false) {
@@ -192,7 +201,7 @@ export default class TinyHandExtension extends Extension {
         try {
             this._config = this._readConfig(true);
         } catch (error) {
-            console.warn(`TinyHand: configuration reload ignored: ${error}`);
+            this._warn('configuration reload ignored', error);
             return;
         }
         if (oldStyle !== this._config.pointer.style)
@@ -215,7 +224,7 @@ export default class TinyHandExtension extends Extension {
             writeJson(this._configPath, merge(readJson(this._configPath, true), patch));
             this._reload();
         } catch (error) {
-            console.warn(`TinyHand: cannot save configuration: ${error}`);
+            this._warn('cannot save configuration', error);
             this._config = merge(this._config, patch);
             this._dirty = true;
             this._visibility();
@@ -369,7 +378,7 @@ export default class TinyHandExtension extends Extension {
             square.savev(path, 'png', [], []);
             return path;
         } catch (error) {
-            console.warn(`TinyHand: thumbnail unavailable: ${error}`);
+            this._warn('thumbnail unavailable', error);
             return null;
         }
     }
@@ -378,7 +387,7 @@ export default class TinyHandExtension extends Extension {
         try {
             this.openPreferences();
         } catch (error) {
-            console.warn(`TinyHand: cannot open settings: ${error}`);
+            this._warn('cannot open settings', error);
         }
     }
 
@@ -406,7 +415,9 @@ export default class TinyHandExtension extends Extension {
             else tracker.uninhibit_cursor_visibility();
         } else if (typeof tracker?.set_pointer_visible === 'function' &&
             typeof tracker?.get_pointer_visible === 'function') {
-            // Mutter 45–48 has no inhibitor. Restore the state we actually changed.
+            // Compatibility-only path for Mutter 45–48. On 49+, the inhibitor
+            // branch above is selected instead; this removed
+            // legacy API is never called on modern Mutter. Do not obscure its name.
             if (hide) {
                 this._cursorWasVisible = tracker.get_pointer_visible();
                 tracker.set_pointer_visible(false);
@@ -476,7 +487,7 @@ export default class TinyHandExtension extends Extension {
             try {
                 delay = this._tick();
             } catch (error) {
-                console.warn(`TinyHand: update failed: ${error}`);
+                this._warn('update failed', error);
             }
             if (this._running) this._schedule(delay);
             return GLib.SOURCE_REMOVE;
@@ -666,7 +677,7 @@ export default class TinyHandExtension extends Extension {
                 surfaceHand: surface(top, wrist - top), surfaceRod: surface(wrist, end - wrist),
                 shadowHand: surface(top, wrist - top, true), shadowRod: surface(wrist, end - wrist, true)};
         } catch (error) {
-            console.warn(`TinyHand: cannot load hand ${style}: ${error}`);
+            this._warn(`cannot load hand ${style}`, error);
         }
         this._assets.set(style, asset);
         return asset;
@@ -684,7 +695,7 @@ export default class TinyHandExtension extends Extension {
             if (this._config.pointer.style === 'laser') this._paintLaser(cr);
             else this._paintHand(cr);
         } catch (error) {
-            console.warn(`TinyHand: paint failed: ${error}`);
+            this._warn('paint failed', error);
         } finally {
             cr.$dispose();
         }
@@ -801,6 +812,10 @@ export default class TinyHandExtension extends Extension {
         this._monitor = null;
         for (const name of this._bound ?? []) Main.wm.removeKeybinding(name);
         this._area?.destroy();
+        this._inkDot?.destroy();
+        this._modeIcon?.destroy();
+        this._soundIcon?.destroy();
+        this._styleBox?.destroy();
         this._toolbar?.destroy();
         this._inkTray?.destroy();
         this._hint?.destroy();
@@ -827,5 +842,7 @@ export default class TinyHandExtension extends Extension {
         this._sources = null;
         this._bound = null;
         this._assetDir = null;
+        this._warningKeys?.clear();
+        this._warningKeys = null;
     }
 }

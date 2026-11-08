@@ -49,6 +49,7 @@ jobs:
           before=$(sha256sum "$zip_path")
           ./linux/scripts/package.sh --extension-only
           test "$(sha256sum "$zip_path")" = "$before"
+          python3 -c 'import zipfile; z=zipfile.ZipFile("linux/dist/tinyhand@abdulrehmankhan56.shell-extension.zip"); assert "schemas/gschemas.compiled" not in z.namelist()'
       - name: Verify rendering and preferences
         shell: bash
         run: |

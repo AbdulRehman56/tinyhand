@@ -69,6 +69,10 @@ assumed compatible with older Shell preferences hosts.
   live input, shortcut, cursor, scaling or other-extension compatibility.
 - The ZIP bundles resized alpha artwork, sounds, schemas, license and credits;
   it needs neither the Rust binary nor a separately cloned source/assets tree.
+- Each schema is in its own matching XML file. GNOME 45+ compiles schemas at install
+  time; the ZIP deliberately omits `gschemas.compiled`. Capability-guarded legacy
+  cursor calls can produce a static-analysis false positive for the 49+ target even
+  though that branch is not reached on modern Mutter.
 - Release tags and assets are immutable in the publication workflow. For a
   compatibility change after publication, increment the extension integer/version
   name and `linux/VERSION` release tag, update notes, and publish a new prerelease. Never silently

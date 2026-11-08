@@ -6,11 +6,4 @@
     <key name="cycle" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;p'</default><summary>Cycle pointer style</summary></key>
     <key name="show-toolbar" type="b"><default>true</default><summary>Show the floating toolbar</summary></key>
   </schema>
-  <!-- Mutter requires keys of type 'as'. Keep the public string settings above
-       and mirror them into this private keybinding adapter. -->
-  <schema id="org.gnome.shell.extensions.tinyhand.bindings" path="/org/gnome/shell/extensions/tinyhand/bindings/">
-    <key name="toggle" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;h']</default></key>
-    <key name="clear" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;x']</default></key>
-    <key name="cycle" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;p']</default></key>
-  </schema>
 </schemalist>

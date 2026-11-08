@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <!-- Mutter requires accelerator arrays; public string settings are mirrored here. -->
+  <schema id="org.gnome.shell.extensions.tinyhand.bindings" path="/org/gnome/shell/extensions/tinyhand/bindings/">
+    <key name="toggle" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;h']</default></key>
+    <key name="clear" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;x']</default></key>
+    <key name="cycle" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;p']</default></key>
+  </schema>
+</schemalist>

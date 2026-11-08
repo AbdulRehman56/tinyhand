@@ -1,5 +1,18 @@
 # Linux release notes
 
+## v1.0.2-linux.4 — GNOME review packaging
+
+- Give each GSettings schema its own correctly named XML file.
+- Validate schemas while packaging, but let GNOME 45+ compile them during installation
+  instead of shipping build artifacts. Verified using an isolated `gnome-extensions install`.
+- Limit repeated runtime warnings to one message per error category and explicitly destroy
+  the toolbar's owned child actors during cleanup.
+- Document the capability-guarded legacy cursor setter for GNOME 45–48. Automated scanning
+  may still flag this call because the same package also targets 49–50; modern versions
+  use balanced cursor inhibition instead, covered by version-shaped tests.
+- Verified locally: 33 Node checks, schema validation, package generation, and automatic
+  installation-time schema compilation. Includes all `.3` customization improvements.
+
 ## v1.0.2-linux.3 — GNOME usability and customization
 
 - Use **TinyHand** as the display name; keep the same extension UUID and original creator credit.

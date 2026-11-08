@@ -34,6 +34,8 @@ reviewed_files=(
   linux/companion/tinyhand@abdulrehmankhan56/extension.js
   linux/companion/tinyhand@abdulrehmankhan56/metadata.json
   linux/companion/tinyhand@abdulrehmankhan56/preferences.js
+  linux/companion/tinyhand@abdulrehmankhan56/schemas/org.gnome.shell.extensions.tinyhand.gschema.xml
+  linux/companion/tinyhand@abdulrehmankhan56/schemas/org.gnome.shell.extensions.tinyhand.bindings.gschema.xml
   linux/tests/companion-render.mjs linux/tests/companion.test.cjs linux/tests/preferences-layout.mjs linux/tests/publication.test.cjs
   linux/scripts/install-release.sh linux/scripts/package.sh linux/scripts/publish.sh
   .github/workflows/linux.yml
@@ -141,6 +143,6 @@ if ! run_id=$(find_run); then
   fi
 fi
 gh run watch "$run_id" --repo AbdulRehman56/tinyhand --exit-status
-release_tag="v$(cat linux/VERSION)"
+release_tag="v$(git show "$commit_sha:linux/VERSION")"
 gh release view "$release_tag" --repo AbdulRehman56/tinyhand --json url --jq .url
 printf 'GNOME listing/review: https://extensions.gnome.org/extension/11682/tinyhand-for-gnome/ (check approval status separately).\n'

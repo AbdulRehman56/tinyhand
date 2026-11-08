@@ -18,6 +18,7 @@ case "$1" in
   branch) echo linux-port ;;
   diff|ls-files|status) ;;
   rev-parse) echo 0123456789012345678901234567890123456789 ;;
+  show) [[ "$2" == '0123456789012345678901234567890123456789:linux/VERSION' ]] || exit 94; echo 1.0.2-linux.4 ;;
   -c) ;;
   *) echo "Unexpected git operation: $*" >&2; exit 95 ;;
 esac
