@@ -31,7 +31,7 @@ if $uninstall; then
   exit 0
 fi
 BUNDLE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-for file in bin/tinyhand bin/tinyhand-settings share/tinyhand/settings/settings.js share/tinyhand/settings/preferences.js share/tinyhand/assets/hand_lavender.png; do
+for file in bin/tinyhand bin/tinyhand-settings share/tinyhand/settings/settings.js share/tinyhand/settings/preferences.js share/tinyhand/settings/experimental.js share/tinyhand/assets/hand_lavender.png; do
   [[ -f "$BUNDLE/$file" ]] || { printf 'Incomplete bundle: missing %s\n' "$file" >&2; exit 1; }
 done
 mkdir -p "$BIN" "$DATA/assets" "$DATA/settings" "$(dirname -- "$DESKTOP")" "$(dirname -- "$ICON")"
@@ -43,7 +43,7 @@ exec gjs -m "$HOME/.local/share/tinyhand/settings/settings.js" "$@"
 EOF
 chmod 755 "$BIN/tinyhand-settings"
 cp -R "$BUNDLE/share/tinyhand/assets/." "$DATA/assets/"
-install -m 644 "$BUNDLE/share/tinyhand/settings/"{preferences,settings}.js "$DATA/settings/"
+install -m 644 "$BUNDLE/share/tinyhand/settings/"{preferences,settings,experimental}.js "$DATA/settings/"
 install -m 644 "$BUNDLE/share/tinyhand/assets/hand_lavender.png" "$ICON"
 # Desktop Exec quoting also escapes characters special inside double quotes.
 DESKTOP_EXEC=${BIN//\\/\\\\}

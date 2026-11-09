@@ -16,7 +16,7 @@
   Reduced-volume Shell taps use `paplay`; missing audio remains nonfatal.
 - Add isolated settings and windowed GNOME preview launchers. The original MIT license,
   Kamran Ahmed (@nilbuild) credit and upstream draft PR are preserved.
-- Verified locally: 46 Node checks, 9 Rust tests, real GTK controls, packaged Cairo renders,
+- Verified locally: 48 Node checks, 9 Rust tests, real GTK controls, packaged Cairo renders,
   and a real separate GNOME Shell 50.1 loading, reloading config and disabling/re-enabling.
   Hands-on dragging, key-event delivery and mixed-DPI behavior still need broader testing.
 - This remains a prerelease, not GNOME review approval. Existing static-analysis findings
