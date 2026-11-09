@@ -95,6 +95,10 @@ reference the current custom slot; they do not archive imported artwork.
 - Local ZIP includes the shared module, original license/credits and XML-only
   schemas; strict schema validation and render checks pass on the unpacked ZIP.
 - Isolated launcher smoke test passes with GTK criticals treated as fatal.
+- The full toolkit settings test additionally passes three consecutive times on
+  Ubuntu 24.04's older GTK/libadwaita in an isolated container with criticals fatal.
+  Test traversal wrappers are collected before their native widget factories are
+  torn down; deletion confirmations use inline controls, not secondary windows.
 - Real, separate headless GNOME Shell 50.1: extension becomes ACTIVE, processes
   atomic config saves and toolbar collapse/rebuild, disables and re-enables without
   TinyHand runtime errors. This does not test hands-on input delivery or mixed DPI.

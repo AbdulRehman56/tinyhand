@@ -8,6 +8,8 @@
 - Make the toolbar movable and collapsible, with saved monitor-relative placement
   and keyboard-accessible positioning controls in settings.
 - Add six editable GNOME shortcuts, named profiles and exact per-app hide/profile rules.
+- Use inline deletion confirmation and stable profile models; validate teardown on
+  Ubuntu 24.04's GTK/libadwaita as well as the maintainer's newer desktop stack.
 - Add one managed custom PNG sprite slot with validation, preview and adjustable anchors.
   This is a standalone sprite, not automatic hand-and-stick reconstruction.
 - Add reduced motion, larger toolbar controls, high-contrast ink and independent volume.

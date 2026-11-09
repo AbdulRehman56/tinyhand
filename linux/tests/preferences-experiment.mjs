@@ -104,17 +104,20 @@ app.connect('activate', () => {
             assert(read().appRules.length === 2 && read().appRules[1].action === 'hide', 'Hide rule failed');
             const dynamicDelete = descendants(window).find(widget => widget instanceof Gtk.Button && widget.label === 'Delete Rule');
             dynamicDelete.emit('clicked');
-            const dialog = () => {
-                const model = Gtk.Window.get_toplevels();
-                for (let i = model.get_n_items() - 1; i >= 0; i--)
-                    if (model.get_item(i) instanceof Adw.MessageDialog && model.get_item(i).visible) return model.get_item(i);
-                throw new Error('Missing confirmation dialog');
+            const respond = label => {
+                const current = descendants(window).find(widget => widget instanceof Adw.PreferencesGroup && widget.title === 'Confirm deletion');
+                assert(current?.visible, 'Missing inline deletion confirmation');
+                const response = descendants(current).find(widget => widget instanceof Gtk.Button && widget.label === label);
+                assert(response, `Missing ${label} response button`);
+                response.emit('clicked');
+                assert(!current.visible, 'Response left the confirmation visible');
+                assert(Gtk.Window.get_toplevels().get_n_items() === 1, 'Confirmation created an extra native window');
             };
-            dialog().response('cancel');
+            respond('Cancel');
             assert(read().appRules.length === 2, 'Cancelling deletion changed rules');
-            dynamicDelete.emit('clicked'); dialog().response('confirm');
+            dynamicDelete.emit('clicked'); respond('Confirm');
             assert(read().appRules.length === 1 && read().appRules[0].appId === 'code', 'Confirmed rule deletion failed');
-            click('Delete Profile'); dialog().response('confirm');
+            click('Delete Profile'); respond('Confirm');
             assert(read().profiles.length === 0, 'Confirmed profile deletion failed');
             print('PASS: profile save/apply/delete, exact-app rules, duplicate/wildcard errors and deletion confirmations.');
 
@@ -155,8 +158,12 @@ app.connect('activate', () => {
             print('PASS: PNG decoding, alpha/nonempty/size/dimension validation, normalization, managed selection and anchors.');
         } catch (error) { failed = true; printerr(`${error.message}\n${error.stack}`); }
         finally {
-            // Allow confirmation close animations/default response handlers to finish.
+            // Exercise idempotent cleanup after pending notifications have settled.
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                // Traversal creates wrappers for GTK's private list-item widgets.
+                // Collect those borrowed test wrappers while their factories and
+                // models are still alive, rather than during process shutdown.
+                System.gc();
                 cleanup(); cleanup(); window.close(); app.quit();
                 return GLib.SOURCE_REMOVE;
             });

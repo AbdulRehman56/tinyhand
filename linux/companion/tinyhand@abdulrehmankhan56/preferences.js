@@ -135,7 +135,7 @@ export function buildPreferences(window, assetDir = null, settings = null) {
     let reloadSource = 0;
     let config = merge(DEFAULTS, {});
     const previews = new Set();
-    const confirmations = new Set();
+    let pendingConfirmation = null;
     let chooser = null;
     const bindings = [];
     const errors = [];
@@ -518,20 +518,13 @@ export function buildPreferences(window, assetDir = null, settings = null) {
         return message => { label.label = message; label.visible = true; };
     }
     function confirm(heading, body, callback) {
-        const dialog = new Adw.MessageDialog({transient_for: window, modal: true, heading, body});
-        dialog.add_response('cancel', 'Cancel');
-        dialog.add_response('confirm', 'Confirm');
-        dialog.set_response_appearance('confirm', Adw.ResponseAppearance.DESTRUCTIVE);
-        dialog.set_default_response('cancel');
-        dialog.set_close_response('cancel');
-        confirmations.add(dialog);
-        dialog.connect('response', (_dialog, response) => {
-            if (response === 'confirm' && !closed) callback();
-            confirmations.delete(dialog);
-            // MessageDialog closes automatically in its default response handler,
-            // which runs after this callback. Do not destroy it a second time here.
-        });
-        dialog.present();
+        // Keep confirmation in the existing window. Legacy GTK/libadwaita modal
+        // windows can retain stale transient parents until GJS garbage collection.
+        pendingConfirmation = callback;
+        confirmationRow.title = heading;
+        confirmationRow.subtitle = body;
+        confirmationGroup.visible = true;
+        cancelConfirmation.grab_focus();
     }
 
     const customGroup = group(pointersPage, 'Custom artwork',
@@ -689,6 +682,25 @@ export function buildPreferences(window, assetDir = null, settings = null) {
     if (shortcutRows.size < 6) shortcutFeedback('Some shortcuts are unavailable. Update or compile the extension schema to enable them.');
 
     const profilesPage = page('Profiles', 'document-properties-symbolic');
+    const confirmationGroup = group(profilesPage, 'Confirm deletion', 'Review this action before continuing.');
+    confirmationGroup.visible = false;
+    const confirmationRow = new Adw.ActionRow({use_markup: false, subtitle_lines: 0});
+    const cancelConfirmation = new Gtk.Button({label: 'Cancel', valign: Gtk.Align.CENTER});
+    const acceptConfirmation = new Gtk.Button({label: 'Confirm', valign: Gtk.Align.CENTER});
+    acceptConfirmation.add_css_class('destructive-action');
+    confirmationRow.add_suffix(cancelConfirmation);
+    confirmationRow.add_suffix(acceptConfirmation);
+    confirmationGroup.add(confirmationRow);
+    connect(cancelConfirmation, 'clicked', () => {
+        pendingConfirmation = null;
+        confirmationGroup.visible = false;
+    });
+    connect(acceptConfirmation, 'clicked', () => {
+        const callback = pendingConfirmation;
+        pendingConfirmation = null;
+        confirmationGroup.visible = false;
+        if (!closed) callback?.();
+    });
     const profiles = group(profilesPage, 'Named profiles', 'Save pointer, ink, sound, interaction, presentation and accessibility settings. Up to 20 profiles.');
     const profileFeedback = notice(profiles);
     const profileName = new Adw.EntryRow({title: 'New profile name'});
@@ -771,8 +783,11 @@ export function buildPreferences(window, assetDir = null, settings = null) {
         const names = current.map(profile => profile.name);
         const signature = JSON.stringify(names);
         if (signature !== profileSignature) {
-            profileSelect.model = Gtk.StringList.new(names.length ? names : ['No profiles']);
-            ruleProfile.model = Gtk.StringList.new(names.length ? names : ['No profiles']);
+            // Retain model identity and update the strings in one operation.
+            for (const row of [profileSelect, ruleProfile]) {
+                row.model.splice(0, row.model.get_n_items(), names.length ? names : ['No profiles']);
+                if (row.selected >= Math.max(1, names.length)) row.selected = 0;
+            }
             profileSignature = signature;
         }
         applyProfile.sensitive = deleteProfile.sensitive = current.length > 0;
@@ -819,11 +834,7 @@ export function buildPreferences(window, assetDir = null, settings = null) {
         monitor?.cancel();
         chooser?.destroy();
         chooser = null;
-        for (const dialog of confirmations) {
-            dialog.set_transient_for(null);
-            dialog.destroy();
-        }
-        confirmations.clear();
+        pendingConfirmation = null;
         for (const pending of previews) pending.force_exit();
         previews.clear();
         for (const [object, id] of signals) object.disconnect(id);
