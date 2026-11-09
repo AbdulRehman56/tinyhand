@@ -3,9 +3,10 @@
 The extension targets GNOME Shell **45–50**. **45–49 are experimental**: their
 versioned APIs were inspected and our fallbacks are covered by automated mocks,
 but those desktops have not been run or tested here. GNOME **50.1** is the only
-desktop used during development; the latest compatibility changes have been
-checked with mocks and installed Mutter 18 API introspection, without reloading
-the active extension. No cross-distribution or full macOS parity claim is made.
+desktop used during development. The toolkit additionally passed a separate real
+GNOME 50.1 session's load, atomic-config-reload, toolbar-rebuild and disable/re-enable
+checks. This does not establish hands-on input or mixed-DPI compatibility. No
+cross-distribution or full macOS parity claim is made.
 
 ## Versioned API assessment
 
@@ -16,7 +17,7 @@ the active extension. No cross-distribution or full macOS parity claim is made.
 | 47 | Display lookup | Legacy setter | Versioned headers + mock; no live test |
 | 48 | `global.backend.get_cursor_tracker()` | Legacy setter | Versioned headers + mock; no live test |
 | 49 | Backend lookup | Balanced `inhibit_cursor_visibility` / `uninhibit_cursor_visibility` | Versioned headers + mock; no live test |
-| 50 | Backend lookup | Balanced inhibitor | Versioned headers + mock; installed Mutter 18 API check; earlier 50.1 desktop development |
+| 50 | Backend lookup | Balanced inhibitor | Versioned headers + mock; installed Mutter 18 API check; 50.1 desktop development and separate real-Shell toolkit smoke test |
 
 The adapter detects capabilities, rather than parsing a distribution's version
 string. It prefers the backend lookup, falls back to the display API, and keeps
@@ -28,9 +29,10 @@ Disable cursor hiding in settings if another extension controls cursor visibilit
 
 All six Mutter versions expose the same sound call:
 `display.get_sound_player().play_from_file(file, description, cancellable)`.
-No guessed argument-count fallback or external audio subprocess is needed in
-Shell. Playback is optional; missing sound support does not stop drawing.
-The cancellable is cancelled during disable.
+No guessed argument-count fallback is used. Full-volume taps use this native API;
+reduced-volume taps use bounded `paplay` subprocesses because the native call has no
+per-play volume parameter. Playback is optional; missing sound support does not stop
+drawing. The cancellable and remaining audio subprocesses are cleaned up during disable.
 
 Shell code uses Cairo and GdkPixbuf, never imports GTK/Gdk/libadwaita, and draws
 through `St.DrawingArea`'s repaint/context APIs. Those APIs were checked in the

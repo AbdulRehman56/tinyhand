@@ -1,5 +1,25 @@
 # Linux release notes
 
+## v1.0.2-linux.5 — experimental GNOME toolkit
+
+- Add opt-in spotlight, click ripples and a privacy-restricted shortcut display
+  (modifiers/navigation/function keys only, never ordinary typed text).
+- Add stroke undo, width, straight lines/arrows and explicit persistent ink.
+- Make the toolbar movable and collapsible, with saved monitor-relative placement
+  and keyboard-accessible positioning controls in settings.
+- Add six editable GNOME shortcuts, named profiles and exact per-app hide/profile rules.
+- Add one managed custom PNG sprite slot with validation, preview and adjustable anchors.
+  This is a standalone sprite, not automatic hand-and-stick reconstruction.
+- Add reduced motion, larger toolbar controls, high-contrast ink and independent volume.
+  Reduced-volume Shell taps use `paplay`; missing audio remains nonfatal.
+- Add isolated settings and windowed GNOME preview launchers. The original MIT license,
+  Kamran Ahmed (@nilbuild) credit and upstream draft PR are preserved.
+- Verified locally: 46 Node checks, 9 Rust tests, real GTK controls, packaged Cairo renders,
+  and a real separate GNOME Shell 50.1 loading, reloading config and disabling/re-enabling.
+  Hands-on dragging, key-event delivery and mixed-DPI behavior still need broader testing.
+- This remains a prerelease, not GNOME review approval. Existing static-analysis findings
+  (synchronous I/O and guarded compatibility/lifecycle analysis) are not claimed resolved.
+
 ## v1.0.2-linux.4 — GNOME review packaging
 
 - Give each GSettings schema its own correctly named XML file.

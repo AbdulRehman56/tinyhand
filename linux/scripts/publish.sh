@@ -30,6 +30,7 @@ for dependency in python3 tar; do command -v "$dependency" >/dev/null; done
 [[ $(git branch --show-current) == linux-port ]] || { printf 'Run from the linux-port branch.\n' >&2; exit 1; }
 reviewed_files=(
   README.md linux/.gitignore linux/README.md linux/CONTRIBUTING.md linux/COMPATIBILITY.md linux/VERSION
+  linux/EXPERIMENT.md linux/tests/shell-smoke.py linux/scripts/preview-shell.sh
   linux/RELEASE_NOTES.md linux/UPSTREAM_PR.md linux/src/config.rs
   linux/companion/tinyhand@abdulrehmankhan56/extension.js
   linux/companion/tinyhand@abdulrehmankhan56/metadata.json

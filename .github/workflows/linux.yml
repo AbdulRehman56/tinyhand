@@ -59,6 +59,7 @@ jobs:
           gjs -m linux/tests/companion-render.mjs "$PWD" "$extension_dir"
           test_config=$(mktemp -d -t tinyhand-layout.XXXXXX)
           XDG_CONFIG_HOME="$test_config" xvfb-run -a dbus-run-session -- gjs -m linux/tests/preferences-layout.mjs
+          G_DEBUG=fatal-criticals xvfb-run -a dbus-run-session -- gjs -m linux/tests/preferences-experiment.mjs "$extension_dir"
       - name: Verify bundle install and uninstall
         shell: bash
         run: |
@@ -73,6 +74,7 @@ jobs:
           "$test_home/.local/bin/tinyhand" --version
           test -x "$test_home/.local/bin/tinyhand-settings"
           test -f "$test_home/.local/share/tinyhand/assets/hand_lavender.png"
+          test -f "$test_home/.local/share/tinyhand/settings/experimental.js"
           HOME="$test_home" "$bundle/install.sh" --uninstall
           test ! -e "$test_home/.local/bin/tinyhand"
           test ! -e "$test_home/.local/share/tinyhand"

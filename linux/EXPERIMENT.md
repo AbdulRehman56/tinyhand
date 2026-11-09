@@ -1,7 +1,8 @@
 # Local GNOME toolkit experiment
 
-This branch is local-only. Do not run publish.sh, push, create a release, or upload
-an extension ZIP without a new explicit request. Release versions are unchanged.
+This toolkit was developed on `experiment/gnome-toolkit-local` without publication.
+The user subsequently authorized publication and installation as `v1.0.2-linux.5`.
+The isolated preview launchers remain available for testing without replacing a live extension.
 The macOS app and experimental X11 runtime are outside this feature work.
 
 ## Implementation stages
@@ -108,5 +109,5 @@ It uses a new D-Bus session and private HOME/XDG directories under `/tmp/opencod
 starts a headless Shell, and terminates only that child Shell when finished. Logs
 and isolated configuration are retained in the printed test directory.
 
-No live extension replacement, push, release, or GNOME submission was performed.
-Local build artifact: `linux/dist/tinyhand-local-experiment.shell-extension.zip`.
+The tests themselves do not replace a live extension, push, publish or submit to GNOME.
+Build artifact: `linux/dist/tinyhand@abdulrehmankhan56.shell-extension.zip`.

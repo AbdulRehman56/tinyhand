@@ -5,6 +5,6 @@
   "url": "https://github.com/AbdulRehman56/tinyhand",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.tinyhand",
-  "version": 6,
-  "version-name": "1.0.2 Local Experiment"
+  "version": 7,
+  "version-name": "1.0.2 Linux 5"
 }

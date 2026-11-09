@@ -47,7 +47,7 @@ architecture. GitHub Actions builds on Ubuntu 24.04; local builds may require ne
 Requirements: Git; Rust/Cargo to build the X11 app; a GNOME session for the companion.
 Settings needs GJS, GTK **4.8+**, and libadwaita **1.4+**; extension installation also needs
 `glib-compile-schemas`. X11 audio and settings sound previews use `paplay`
-(PulseAudio/PipeWire); Shell tap sounds use GNOME's sound player, not `paplay`.
+  (PulseAudio/PipeWire); Shell taps use GNOME's sound player at full volume and `paplay` for reduced volume.
 The Rust build does not require system development headers.
 
 Review the installer before running it. Installation is per-user under `~/.local/`;
@@ -79,6 +79,8 @@ Add `~/.local/bin` to your `PATH` to use `tinyhand` and `tinyhand-settings` dire
   to draw without selecting content underneath. Hold **Alt** to interact normally.
 - The GNOME toolbar provides pointer previews, Point/Draw, ink colors, sound, clear,
   settings, and hide. Hiding the system cursor is optional in settings.
+- GNOME Toolkit adds spotlight/click ripples, line/arrow drawing and undo, profiles,
+  per-app rules, custom PNG sprites, editable shortcuts and accessibility controls.
 - X11 captures taps/drags, hides the cursor, and offers a tray menu; hold **Alt** for
   click-through. Tray visibility may require an AppIndicator extension.
 
@@ -106,8 +108,9 @@ Uninstall keeps your config; add `--purge` only if you want to delete it too.
 Rust tests, offline render/self-tests, companion logic checks, and GTK settings tests
 cover parts of the implementation—not every live desktop interaction. Mixed-scale and
 multi-monitor setups, shortcut conflicts, click-through, and other extensions need
-desktop testing. Custom hands, drag-and-drop pin reordering, and a complete hotkey settings UI remain
-gaps relative to macOS. See [release notes](./linux/RELEASE_NOTES.md) for the tested scope.
+desktop testing. Custom artwork currently supports one standalone PNG slot, not full
+hand-and-stick reconstruction; drag-and-drop pin reordering remains a gap relative to
+macOS. See [release notes](./linux/RELEASE_NOTES.md) for the tested scope.
 
 Bug reports and focused patches are welcome; include your session type, GNOME version,
 and reproduction steps. This fork is independent: any upstream Linux PR is a proposal,

@@ -95,13 +95,13 @@ def main():
         inner(Path(args[1]), windowed)
         return
     root = Path(tempfile.mkdtemp(prefix="tinyhand-shell.", dir="/tmp/opencode"))
-    archive = Path(args[0]) if args else Path(__file__).resolve().parents[1] / "dist/tinyhand-local-experiment.shell-extension.zip"
+    archive = Path(args[0]) if args else Path(__file__).resolve().parents[1] / f"dist/{UUID}.shell-extension.zip"
     extension = root / "data/gnome-shell/extensions" / UUID
     extension.mkdir(parents=True)
     with zipfile.ZipFile(archive) as bundle:
         metadata = json.loads(bundle.read("metadata.json"))
-        if "Local Experiment" not in metadata.get("version-name", ""):
-            raise RuntimeError("Refusing to test an archive not marked Local Experiment")
+        if metadata.get("uuid") != UUID or metadata.get("name") != "TinyHand":
+            raise RuntimeError("Refusing to test an unexpected extension archive")
         for name in bundle.namelist():
             if not (extension / name).resolve().is_relative_to(extension.resolve()):
                 raise RuntimeError("Unsafe archive path")
