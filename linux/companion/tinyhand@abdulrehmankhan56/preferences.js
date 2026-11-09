@@ -527,9 +527,9 @@ export function buildPreferences(window, assetDir = null, settings = null) {
         confirmations.add(dialog);
         dialog.connect('response', (_dialog, response) => {
             if (response === 'confirm' && !closed) callback();
-            dialog.set_transient_for(null);
             confirmations.delete(dialog);
-            dialog.destroy();
+            // MessageDialog closes automatically in its default response handler,
+            // which runs after this callback. Do not destroy it a second time here.
         });
         dialog.present();
     }
