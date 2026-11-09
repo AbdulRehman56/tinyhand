@@ -4,6 +4,9 @@
     <key name="toggle" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;h'</default><summary>Toggle TinyHand</summary></key>
     <key name="clear" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;x'</default><summary>Clear ink</summary></key>
     <key name="cycle" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;p'</default><summary>Cycle pointer style</summary></key>
+    <key name="mode" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;d'</default><summary>Toggle Point and Draw mode</summary></key>
+    <key name="undo" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;z'</default><summary>Undo last stroke</summary></key>
+    <key name="presentation" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;s'</default><summary>Toggle presentation mode</summary></key>
     <key name="show-toolbar" type="b"><default>true</default><summary>Show the floating toolbar</summary></key>
   </schema>
 </schemalist>

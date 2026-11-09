@@ -4,14 +4,19 @@ import Adw from 'gi://Adw?version=1';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import {normalizeExperiment} from './experimental.js';
 
 const DEFAULTS = {
     enabled: true,
     pointer: {style: 'lavender', size: 0.13, shadow: true},
-    ink: {choice: 'match', fade: 3.0},
-    sound: {hand: true, laser: false, tap: 'thock'},
+    ink: {choice: 'match', fade: 3.0, tool: 'freehand', width: 6, permanent: false},
+    sound: {hand: true, laser: false, tap: 'thock', volume: 1},
     interaction: {mode: 'point', hideCursor: true},
-    toolbar: {pinnedStyles: ['lavender', 'glove', 'coral', 'plush', 'robot', 'laser']},
+    toolbar: {pinnedStyles: ['lavender', 'glove', 'coral', 'plush', 'robot', 'laser'], collapsed: false, position: null, monitor: 0},
+    presentation: {enabled: false, spotlight: false, radius: 140, dim: 0.45, ripples: true, keystrokes: false},
+    accessibility: {reducedMotion: false, largeControls: false, highContrast: false},
+    custom: {tipX: 0.5, tipY: 0.05},
+    profiles: [], appRules: [],
 };
 const STYLES = [
     'lavender', 'glove', 'coral', 'plush', 'robot', 'pink', 'blue', 'mint',
@@ -86,11 +91,39 @@ function handTexture(path) {
     return Gdk.Texture.new_for_pixbuf(crop);
 }
 
+// Validate before decoding so oversized PNG headers cannot allocate huge buffers.
+// Exported for isolated GTK/GdkPixbuf regression tests; no filesystem side effects.
+export function normalizeCustomArtwork(bytes) {
+    if (bytes.length > 8 * 1024 * 1024 || bytes.length < 24 ||
+        ![137, 80, 78, 71, 13, 10, 26, 10].every((byte, i) => bytes[i] === byte))
+        throw new Error('The file is not a valid PNG (maximum 8 MiB)');
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const width = view.getUint32(16), height = view.getUint32(20);
+    if (!width || !height || width > 4096 || height > 4096)
+        throw new Error('PNG dimensions must be between 1 and 4096 pixels');
+    const loader = GdkPixbuf.PixbufLoader.new_with_type('png');
+    try { loader.write(bytes); loader.close(); }
+    catch (error) { try { loader.close(); } catch (_) {} throw error; }
+    const image = loader.get_pixbuf();
+    if (!image?.has_alpha) throw new Error('PNG must have an alpha channel');
+    const pixels = image.get_pixels();
+    let nonempty = false;
+    for (let y = 0; y < image.height && !nonempty; y++)
+        for (let x = 0; x < image.width; x++)
+            if (pixels[y * image.rowstride + x * image.n_channels + image.n_channels - 1]) {
+                nonempty = true; break;
+            }
+    if (!nonempty) throw new Error('PNG is entirely transparent');
+    const ratio = Math.min(1, 384 / image.width, 576 / image.height);
+    return ratio < 1 ? image.scale_simple(Math.max(1, Math.round(image.width * ratio)),
+        Math.max(1, Math.round(image.height * ratio)), GdkPixbuf.InterpType.BILINEAR) : image;
+}
+
 /** Fill an Adw.PreferencesWindow; return an idempotent cleanup function.
  * @param {Adw.PreferencesWindow} window
  * @param {string|null} assetDir optional assets directory
  */
-export function buildPreferences(window, assetDir = null) {
+export function buildPreferences(window, assetDir = null, settings = null) {
     if (Gtk.check_version(4, 8, 0) || typeof Adw.SwitchRow !== 'function')
         throw new Error('TinyHand Settings requires GTK 4.8 or later and libadwaita 1.4 or later.');
     const assets = findAssets(assetDir);
@@ -101,6 +134,9 @@ export function buildPreferences(window, assetDir = null) {
     let monitor = null;
     let reloadSource = 0;
     let config = merge(DEFAULTS, {});
+    const previews = new Set();
+    const confirmations = new Set();
+    let chooser = null;
     const bindings = [];
     const errors = [];
     const signals = [];
@@ -123,7 +159,8 @@ export function buildPreferences(window, assetDir = null) {
         vexpand: true});
     sidebar.add_css_class('navigation-sidebar');
     const rail = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 12, vexpand: true});
-    rail.append(sidebar);
+    rail.append(new Gtk.ScrolledWindow({child: sidebar, vexpand: true,
+        hscrollbar_policy: Gtk.PolicyType.NEVER, vscrollbar_policy: Gtk.PolicyType.AUTOMATIC}));
     const brand = new Gtk.Label({label: 'TinyHand', xalign: 0, margin_start: 12,
         margin_bottom: 12, valign: Gtk.Align.END});
     brand.add_css_class('heading');
@@ -158,7 +195,7 @@ export function buildPreferences(window, assetDir = null) {
     function refresh() {
         if (closed) return;
         try {
-            config = merge(DEFAULTS, read().value);
+            config = normalizeExperiment(merge(DEFAULTS, read().value));
             config.toolbar = merge(isObject(config.toolbar) ? config.toolbar : {},
                 {pinnedStyles: pinnedStyles(config.toolbar?.pinnedStyles)});
             syncing = true;
@@ -178,18 +215,20 @@ export function buildPreferences(window, assetDir = null) {
             // An etag conflict refuses the write instead of overwriting a concurrent edit.
             const {value, etag} = read();
             const changes = typeof patch === 'function' ? patch(value) : patch;
-            if (!changes) return;
+            if (!changes) return false;
             if (GLib.mkdir_with_parents(directory, 0o700) !== 0)
                 throw new Error('Cannot create the configuration directory');
             file.replace_contents(JSON.stringify(merge(value, changes), null, 2) + '\n',
                 etag, false, Gio.FileCreateFlags.PRIVATE, null);
             refresh();
+            return true;
         } catch (error) {
             // Revert the unsaved control where possible without hiding the error.
             syncing = true;
             try { for (const update of bindings) update(config); }
             finally { syncing = false; }
             showError(`Could not save: ${error.message}. Existing configuration was not overwritten.`);
+            return false;
         }
     }
 
@@ -205,7 +244,7 @@ export function buildPreferences(window, assetDir = null) {
         stackPage.icon_name = icon;
         const status = new Adw.PreferencesGroup();
         const error = new Adw.ActionRow({title: 'Configuration needs attention', visible: false,
-            subtitle_lines: 0});
+            subtitle_lines: 0, accessible_role: Gtk.AccessibleRole.ALERT});
         error.add_css_class('error');
         status.add(error);
         result.append(status);
@@ -395,6 +434,9 @@ export function buildPreferences(window, assetDir = null) {
     combo(ink, 'Ink colour', 'Matches each pointer, or uses your chosen colour.', COLORS, 'ink', 'choice', 'match');
     slider(ink, 'Lines fade', 'Set to 0 to keep until cleared.', 'ink', 'fade', 0, 30, 1, 3,
         value => value === 0 ? 'Permanent' : `${Math.round(value)} s`);
+    combo(ink, 'Drawing tool', 'Choose how strokes are drawn.', ['freehand', 'line', 'arrow'], 'ink', 'tool', 'freehand');
+    slider(ink, 'Stroke width', 'Width in logical pixels.', 'ink', 'width', 2, 32, 1, 6, value => `${value} px`);
+    switchRow(ink, 'Keep ink until cleared', 'Ignore the fade timer for new strokes.', 'ink', 'permanent', false);
 
     const soundPage = page('Sound', 'audio-speakers-symbolic');
     const soundCards = group(soundPage, 'Tap sound', 'Click a sound to hear it. It plays each time the hand taps.');
@@ -431,6 +473,8 @@ export function buildPreferences(window, assetDir = null) {
     const sounds = group(soundPage, 'Options', 'Choose when TinyHand plays a sound.');
     switchRow(sounds, 'Hand sounds', 'Play a tap when using a hand pointer.', 'sound', 'hand', true);
     switchRow(sounds, 'Laser dot taps too', 'Off by default, for quiet pointing.', 'sound', 'laser', false);
+    slider(sounds, 'Volume', 'Applies to tap feedback and previews.', 'sound', 'volume', 0, 1, 0.05, 1,
+        value => `${Math.round(value * 100)}%`);
     const tap = combo(sounds, 'Tap sound', 'Preview any sound before choosing.', TAPS, 'sound', 'tap', 'thock');
     const testRow = new Adw.ActionRow({title: 'Preview sound', subtitle: 'Plays even when tap feedback is disabled.'});
     const test = new Gtk.Button({label: 'Test Sound', valign: Gtk.Align.CENTER});
@@ -441,18 +485,316 @@ export function buildPreferences(window, assetDir = null) {
         try {
             if (!assets) throw new Error('Sound assets were not found');
             const path = GLib.build_filenamev([assets, 'sounds', `tap_${choice}.wav`]);
-            const process = Gio.Subprocess.new(['paplay', path], Gio.SubprocessFlags.STDERR_PIPE);
+            for (const pending of previews) pending.force_exit();
+            previews.clear();
+            const volume = Math.round(Math.max(0, Math.min(1, config.sound?.volume ?? 1)) * 65536);
+            const process = Gio.Subprocess.new(['paplay', `--volume=${volume}`, path], Gio.SubprocessFlags.STDERR_PIPE);
+            previews.add(process);
             process.communicate_utf8_async(null, null, (source, result) => {
                 try {
                     const [, , stderr] = source.communicate_utf8_finish(result);
-                    if (!closed && !source.get_successful()) showError(`Sound preview failed: ${stderr.trim()}`);
+                    if (!closed && previews.has(source) && !source.get_successful()) showError(`Sound preview failed: ${stderr.trim()}`);
                 } catch (error) {
-                    if (!closed) showError(`Sound preview failed: ${error.message}`);
-                }
+                    if (!closed && previews.has(source)) showError(`Sound preview failed: ${error.message}`);
+                } finally { previews.delete(source); }
             });
         } catch (error) { showError(`Sound preview failed: ${error.message}`); }
     }
     connect(test, 'clicked', () => playSound(TAPS[tap.selected] ?? 'thock'));
+
+    function action(parent, name, label, callback, subtitle = '') {
+        const row = new Adw.ActionRow({title: name, subtitle});
+        const button = new Gtk.Button({label, valign: Gtk.Align.CENTER});
+        row.add_suffix(button);
+        row.activatable_widget = button;
+        parent.add(row);
+        connect(button, 'clicked', callback);
+        return button;
+    }
+    function notice(parent) {
+        const label = new Gtk.Label({xalign: 0, wrap: true, visible: false,
+            accessible_role: Gtk.AccessibleRole.STATUS});
+        parent.add(label);
+        return message => { label.label = message; label.visible = true; };
+    }
+    function confirm(heading, body, callback) {
+        const dialog = new Adw.MessageDialog({transient_for: window, modal: true, heading, body});
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('confirm', 'Confirm');
+        dialog.set_response_appearance('confirm', Adw.ResponseAppearance.DESTRUCTIVE);
+        dialog.set_default_response('cancel');
+        dialog.set_close_response('cancel');
+        confirmations.add(dialog);
+        dialog.connect('response', (_dialog, response) => {
+            if (response === 'confirm' && !closed) callback();
+            dialog.set_transient_for(null);
+            confirmations.delete(dialog);
+            dialog.destroy();
+        });
+        dialog.present();
+    }
+
+    const customGroup = group(pointersPage, 'Custom artwork',
+        'Import a transparent PNG. It is displayed as a standalone image, not a hand on a stick. Preview first, then use it.');
+    const customPreview = new Gtk.Picture({height_request: 160, can_shrink: true,
+        content_fit: Gtk.ContentFit.CONTAIN});
+    customGroup.add(customPreview);
+    const customFeedback = notice(customGroup);
+    const customPath = GLib.build_filenamev([GLib.get_user_data_dir(), 'tinyhand', 'custom', 'hand.png']);
+    let pendingArtwork = null;
+    let displayedRevision = null;
+    const useCustom = action(customGroup, 'Select previewed artwork', 'Use Custom', () => {
+        try {
+            if (pendingArtwork) {
+                // Refuse malformed/unreadable configuration before touching an
+                // existing custom slot. save() still checks a fresh etag later.
+                read();
+                const parent = Gio.File.new_for_path(customPath).get_parent();
+                if (GLib.mkdir_with_parents(parent.get_path(), 0o700) !== 0)
+                    throw new Error('Cannot create the private artwork directory');
+                // Encode in memory, then atomically replace only our managed file.
+                const [ok, bytes] = pendingArtwork.save_to_bufferv('png', [], []);
+                if (!ok) throw new Error('Could not encode the artwork');
+                Gio.File.new_for_path(customPath).replace_contents(bytes, null, false,
+                    Gio.FileCreateFlags.PRIVATE | Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+                pendingArtwork = null;
+                if (!save({pointer: {style: 'custom'}, custom: {revision: GLib.uuid_string_random()}})) {
+                    customFeedback('Artwork imported, but configuration could not be saved. Fix the configuration error, then choose Use Custom again.');
+                    return;
+                }
+            } else if (GLib.file_test(customPath, GLib.FileTest.IS_REGULAR)) {
+                if (!save({pointer: {style: 'custom'}, custom: {revision: GLib.uuid_string_random()}})) return;
+            } else throw new Error('Import and preview a PNG first');
+            customFeedback('Artwork stored in TinyHand’s private data folder. Original files are unchanged.');
+        } catch (error) { customFeedback(`Cannot use artwork: ${error.message}`); }
+    });
+    action(customGroup, 'Choose a transparent PNG', 'Import PNG…', () => {
+        chooser?.destroy();
+        chooser = new Gtk.FileChooserNative({title: 'Preview custom pointer', transient_for: window,
+            action: Gtk.FileChooserAction.OPEN, accept_label: 'Preview', cancel_label: 'Cancel', modal: true});
+        const filter = new Gtk.FileFilter({name: 'PNG images'});
+        filter.add_mime_type('image/png');
+        chooser.add_filter(filter);
+        chooser.connect('response', (dialog, response) => {
+            try {
+                if (response !== Gtk.ResponseType.ACCEPT || closed) return;
+                const selected = dialog.get_file();
+                if (!selected?.get_path()) throw new Error('Choose a local PNG file');
+                const info = selected.query_info('standard::size,standard::type', Gio.FileQueryInfoFlags.NONE, null);
+                if (info.get_file_type() !== Gio.FileType.REGULAR || info.get_size() > 8 * 1024 * 1024)
+                    throw new Error('Choose a regular PNG no larger than 8 MiB');
+                const [, bytes] = selected.load_contents(null);
+                pendingArtwork = normalizeCustomArtwork(bytes);
+                customPreview.paintable = Gdk.Texture.new_for_pixbuf(pendingArtwork);
+                useCustom.sensitive = true;
+                customFeedback(`Preview: ${pendingArtwork.width} × ${pendingArtwork.height}. Choose Use Custom to save and select it.`);
+            } catch (error) { customFeedback(`Cannot import PNG: ${error.message}`); }
+            finally { dialog.destroy(); if (chooser === dialog) chooser = null; }
+        });
+        chooser.show();
+    }, 'Maximum 8 MiB and 4096 × 4096 pixels. Normalized to fit 384 × 576.');
+    slider(customGroup, 'Horizontal anchor', '0 = left edge; 1 = right edge.', 'custom', 'tipX', 0, 1, 0.01, 0.5,
+        value => `${Math.round(value * 100)}%`);
+    slider(customGroup, 'Vertical anchor', '0 = top edge; 1 = bottom edge. This point follows the cursor.', 'custom', 'tipY', 0, 1, 0.01, 0.05,
+        value => `${Math.round(value * 100)}%`);
+    bindings.push(value => {
+        const exists = GLib.file_test(customPath, GLib.FileTest.IS_REGULAR);
+        useCustom.sensitive = Boolean(pendingArtwork || exists);
+        if (!pendingArtwork && exists && displayedRevision !== value.custom?.revision) {
+            try {
+                customPreview.paintable = Gdk.Texture.new_from_filename(customPath);
+                displayedRevision = value.custom?.revision;
+            } catch (error) { customFeedback(`Cannot preview saved artwork: ${error.message}`); }
+        }
+    });
+
+    const toolkit = page('Toolkit', 'applications-utilities-symbolic');
+    const presenting = group(toolkit, 'Presentation', 'Spotlight, click feedback and optional keystroke display.');
+    switchRow(presenting, 'Presentation mode', 'Enable presentation effects.', 'presentation', 'enabled', false);
+    switchRow(presenting, 'Spotlight', 'Dim the screen outside the cursor spotlight.', 'presentation', 'spotlight', false);
+    slider(presenting, 'Spotlight radius', 'Radius in logical pixels.', 'presentation', 'radius', 40, 500, 10, 140, value => `${value} px`);
+    slider(presenting, 'Background dimming', 'Opacity outside the spotlight.', 'presentation', 'dim', 0.1, 0.85, 0.05, 0.45,
+        value => `${Math.round(value * 100)}%`);
+    switchRow(presenting, 'Click ripples', 'Highlight pointer clicks.', 'presentation', 'ripples', true);
+    switchRow(presenting, 'Show keystrokes', 'Best-effort modifiers, navigation and F1–F12 only; delivery depends on GNOME focus. Printable text is never shown or logged.', 'presentation', 'keystrokes', false);
+    const toolbar = group(toolkit, 'Floating toolbar', 'Keyboard-adjustable position within the selected monitor.');
+    switchRow(toolbar, 'Collapsed toolbar', 'Show the compact toolbar.', 'toolbar', 'collapsed', false);
+    slider(toolbar, 'Monitor', '0 is the first monitor; unavailable monitors fall back automatically.', 'toolbar', 'monitor', 0, 15, 1, 0,
+        value => `${value}`);
+    for (const [axis, name] of [['x', 'Horizontal position'], ['y', 'Vertical position']]) {
+        const row = new Adw.ActionRow({title: name, subtitle: '0% = start edge; 100% = end edge.'});
+        const scale = new Gtk.Scale({orientation: Gtk.Orientation.HORIZONTAL, width_request: 200,
+            valign: Gtk.Align.CENTER, digits: 0, draw_value: true,
+            adjustment: new Gtk.Adjustment({lower: 0, upper: 100, step_increment: 1, page_increment: 10})});
+        scale.update_property([Gtk.AccessibleProperty.LABEL], [name]);
+        row.add_suffix(scale);
+        toolbar.add(row);
+        bindings.push(value => scale.set_value((value.toolbar?.position?.[axis] ?? (axis === 'x' ? 0.5 : 1)) * 100));
+        connect(scale, 'value-changed', () => save(value => ({toolbar: {position: {
+            x: value.toolbar?.position?.x ?? 0.5, y: value.toolbar?.position?.y ?? 1,
+            [axis]: scale.get_value() / 100}}})));
+    }
+    action(toolbar, 'Restore automatic toolbar position', 'Reset Position', () => save({toolbar: {position: null}}));
+    const accessibility = group(toolkit, 'Accessibility', 'Adjust overlay motion, contrast and target sizes.');
+    switchRow(accessibility, 'Reduced motion', 'Reduce animated overlay effects.', 'accessibility', 'reducedMotion', false);
+    switchRow(accessibility, 'Large controls', 'Use larger toolbar targets.', 'accessibility', 'largeControls', false);
+    switchRow(accessibility, 'High contrast', 'Increase overlay and toolbar contrast.', 'accessibility', 'highContrast', false);
+    bindings.push(value => stack.transition_type = value.accessibility?.reducedMotion
+        ? Gtk.StackTransitionType.NONE : Gtk.StackTransitionType.CROSSFADE);
+
+    const shortcuts = group(toolkit, 'Keyboard shortcuts', 'Use GTK notation, for example &lt;Control&gt;&lt;Alt&gt;h. Empty disables a shortcut. Save validates all fields.');
+    const shortcutFeedback = notice(shortcuts);
+    if (!settings) {
+        try {
+            const schemaDir = Gio.File.new_for_uri(import.meta.url).get_parent().get_child('schemas').get_path();
+            const source = Gio.SettingsSchemaSource.new_from_directory(schemaDir, Gio.SettingsSchemaSource.get_default(), false);
+            const schema = source.lookup('org.gnome.shell.extensions.tinyhand', true);
+            if (schema) settings = new Gio.Settings({settings_schema: schema});
+        } catch (_) { /* Standalone packages may not ship compiled schemas. */ }
+    }
+    const shortcutRows = new Map();
+    for (const [key, name] of [['toggle', 'Toggle TinyHand'], ['clear', 'Clear ink'], ['cycle', 'Cycle pointer'],
+        ['mode', 'Switch pointer mode'], ['undo', 'Undo stroke'], ['presentation', 'Toggle presentation']]) {
+        const available = settings?.settings_schema.has_key(key) && settings.settings_schema.get_key(key).get_value_type().dup_string() === 's';
+        const row = new Adw.EntryRow({title: name, sensitive: Boolean(available)});
+        row.text = available ? settings.get_string(key) : 'Unavailable — updated shortcut schema required';
+        shortcuts.add(row);
+        if (available) shortcutRows.set(key, row);
+    }
+    const saveShortcuts = action(shortcuts, 'Apply keyboard shortcuts', 'Save Shortcuts', () => {
+        try {
+            const seen = new Set(), changes = [];
+            for (const [key, row] of shortcutRows) {
+                const text = row.text.trim();
+                let accelerator = '';
+                if (text) {
+                    const [ok, keyval, modifiers] = Gtk.accelerator_parse(text);
+                    if (!ok || !Gtk.accelerator_valid(keyval, modifiers) ||
+                        (!modifiers && /[\p{L}\p{N}]/u.test(String.fromCodePoint(Gdk.keyval_to_unicode(keyval) || 0))))
+                        throw new Error(`${row.title}: use a valid shortcut with modifiers, not a plain letter or number.`);
+                    accelerator = Gtk.accelerator_name(keyval, modifiers);
+                    if (seen.has(accelerator)) throw new Error(`${row.title}: this shortcut is already used.`);
+                    seen.add(accelerator);
+                }
+                if (!settings.is_writable(key)) throw new Error(`${row.title} is not writable.`);
+                changes.push([key, accelerator]);
+            }
+            settings.delay();
+            for (const [key, accelerator] of changes) settings.set_string(key, accelerator);
+            settings.apply();
+            shortcutFeedback('Shortcuts saved. Empty fields are disabled.');
+        } catch (error) { settings?.revert(); shortcutFeedback(`Shortcuts unchanged: ${error.message}`); }
+    });
+    saveShortcuts.sensitive = shortcutRows.size > 0;
+    if (shortcutRows.size < 6) shortcutFeedback('Some shortcuts are unavailable. Update or compile the extension schema to enable them.');
+
+    const profilesPage = page('Profiles', 'document-properties-symbolic');
+    const profiles = group(profilesPage, 'Named profiles', 'Save pointer, ink, sound, interaction, presentation and accessibility settings. Up to 20 profiles.');
+    const profileFeedback = notice(profiles);
+    const profileName = new Adw.EntryRow({title: 'New profile name'});
+    profiles.add(profileName);
+    const profileSections = ['pointer', 'ink', 'sound', 'interaction', 'presentation', 'accessibility'];
+    const supportedSnapshot = value => {
+        const result = {};
+        const complete = merge(DEFAULTS, value);
+        for (const section of profileSections) {
+            result[section] = {};
+            for (const key of Object.keys(DEFAULTS[section])) result[section][key] = complete[section]?.[key] ?? DEFAULTS[section][key];
+        }
+        return result;
+    };
+    const validProfiles = value => Array.isArray(value.profiles)
+        ? value.profiles.filter(profile => typeof profile?.name === 'string' && isObject(profile.settings)).slice(0, 20) : [];
+    action(profiles, 'Capture current settings', 'Save Profile', () => {
+        const name = profileName.text.trim();
+        if (!name || name.length > 60 || /[\x00-\x1f]/.test(name)) {
+            profileFeedback('Enter a profile name from 1 to 60 characters, without control characters.'); return;
+        }
+        save(value => {
+            const current = validProfiles(value);
+            if (current.some(profile => profile.name.toLowerCase() === name.toLowerCase())) {
+                profileFeedback('That profile name already exists. Choose another name.'); return null;
+            }
+            if (current.length >= 20) { profileFeedback('Profile limit reached (20). Delete a profile first.'); return null; }
+            profileFeedback(`Saved profile “${name}”.`);
+            return {profiles: [...current, {name, settings: supportedSnapshot(value)}]};
+        });
+    });
+    const profileSelect = new Adw.ComboRow({title: 'Saved profile', model: Gtk.StringList.new(['No profiles'])});
+    profiles.add(profileSelect);
+    const selectedProfile = () => validProfiles(config)[profileSelect.selected];
+    const applyProfile = action(profiles, 'Load selected settings', 'Apply Profile', () => {
+        const profile = selectedProfile();
+        if (!profile) return profileFeedback('Select a saved profile first.');
+        const snapshot = supportedSnapshot(profile.settings);
+        if (save(snapshot)) profileFeedback(`Applied profile “${profile.name}”. Toolbar and app rules were preserved.`);
+    });
+    const deleteProfile = action(profiles, 'Remove selected profile', 'Delete Profile', () => {
+        const profile = selectedProfile();
+        if (!profile) return profileFeedback('Select a saved profile first.');
+        confirm('Delete profile?', `Delete “${profile.name}”? Rules using this profile will also be removed.`, () => save(value => ({
+            profiles: validProfiles(value).filter(item => item.name !== profile.name),
+            appRules: (Array.isArray(value.appRules) ? value.appRules : []).filter(rule => rule.profile !== profile.name),
+        })));
+    });
+    const rules = group(profilesPage, 'Per-application rules', 'Exact, case-insensitive app IDs only (for example org.gnome.Terminal). Wildcards are not supported.');
+    const ruleFeedback = notice(rules);
+    const appId = new Adw.EntryRow({title: 'Exact application ID'});
+    rules.add(appId);
+    const ruleAction = new Adw.ComboRow({title: 'Application action', model: Gtk.StringList.new(['Hide TinyHand', 'Apply profile'])});
+    rules.add(ruleAction);
+    const ruleProfile = new Adw.ComboRow({title: 'Application profile', model: Gtk.StringList.new(['No profiles'])});
+    rules.add(ruleProfile);
+    connect(ruleAction, 'notify::selected', () => ruleProfile.sensitive = ruleAction.selected === 1 && validProfiles(config).length > 0);
+    action(rules, 'Create application rule', 'Add Rule', () => {
+        const id = appId.text.trim();
+        if (!id || id.length > 200 || /[\s*?\[\]\x00-\x1f]/.test(id)) {
+            ruleFeedback('Enter an exact application ID, without whitespace or wildcard characters.'); return;
+        }
+        const profile = validProfiles(config)[ruleProfile.selected];
+        if (ruleAction.selected === 1 && !profile) { ruleFeedback('Save and select a profile first.'); return; }
+        save(value => {
+            const current = Array.isArray(value.appRules) ? value.appRules : [];
+            if (current.length >= 50) { ruleFeedback('Rule limit reached (50). Delete a rule first.'); return null; }
+            if (current.some(rule => String(rule.appId).toLowerCase() === id.toLowerCase())) {
+                ruleFeedback('A rule for this application already exists. Delete it before adding a replacement.'); return null;
+            }
+            ruleFeedback(`Added rule for ${id}.`);
+            return {appRules: [...current, {appId: id, action: ruleAction.selected === 1 ? 'profile' : 'hide', profile: profile?.name ?? ''}]};
+        });
+    });
+    const ruleList = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6});
+    rules.add(ruleList);
+    let profileSignature = null, ruleSignature = null;
+    bindings.push(value => {
+        const current = validProfiles(value);
+        const names = current.map(profile => profile.name);
+        const signature = JSON.stringify(names);
+        if (signature !== profileSignature) {
+            profileSelect.model = Gtk.StringList.new(names.length ? names : ['No profiles']);
+            ruleProfile.model = Gtk.StringList.new(names.length ? names : ['No profiles']);
+            profileSignature = signature;
+        }
+        applyProfile.sensitive = deleteProfile.sensitive = current.length > 0;
+        ruleProfile.sensitive = ruleAction.selected === 1 && current.length > 0;
+        const currentRules = Array.isArray(value.appRules) ? value.appRules : [];
+        const nextRules = JSON.stringify(currentRules);
+        if (ruleSignature === nextRules) return;
+        ruleSignature = nextRules;
+        while (ruleList.get_first_child()) ruleList.remove(ruleList.get_first_child());
+        for (const [index, rule] of currentRules.entries()) {
+            const row = new Adw.ActionRow({title: String(rule.appId ?? 'Invalid application ID'),
+                subtitle: rule.action === 'profile' ? `Profile: ${rule.profile}` : 'Hide TinyHand'});
+            const remove = new Gtk.Button({label: 'Delete Rule', valign: Gtk.Align.CENTER,
+                tooltip_text: `Delete rule for ${rule.appId}`});
+            row.add_suffix(remove);
+            // Dynamic rows own their signal; do not retain removed widgets in the cleanup list.
+            remove.connect('clicked', () => confirm('Delete application rule?', `Remove the rule for ${rule.appId}?`,
+                () => save(latest => ({appRules: (Array.isArray(latest.appRules) ? latest.appRules : [])
+                    .filter((item, i) => i !== index || JSON.stringify(item) !== JSON.stringify(rule))}))));
+            ruleList.append(row);
+        }
+    });
 
     const reset = group(generalPage, 'Defaults', 'Reset the settings shown here. Other configuration is preserved.');
     const resetRow = new Adw.ActionRow({title: 'Restore default appearance, ink and sound'});
@@ -463,7 +805,8 @@ export function buildPreferences(window, assetDir = null) {
     connect(resetButton, 'clicked', () => {
         search.text = '';
         pinFeedback.visible = false;
-        save(DEFAULTS);
+        const {profiles: _profiles, appRules: _rules, custom: _custom, ...defaults} = DEFAULTS;
+        save(defaults);
     });
     // Open on the visual picker: this is a customization window first.
     stack.visible_child_name = 'pointers';
@@ -474,6 +817,15 @@ export function buildPreferences(window, assetDir = null) {
         if (reloadSource) GLib.source_remove(reloadSource);
         reloadSource = 0;
         monitor?.cancel();
+        chooser?.destroy();
+        chooser = null;
+        for (const dialog of confirmations) {
+            dialog.set_transient_for(null);
+            dialog.destroy();
+        }
+        confirmations.clear();
+        for (const pending of previews) pending.force_exit();
+        previews.clear();
         for (const [object, id] of signals) object.disconnect(id);
         signals.length = 0;
     }

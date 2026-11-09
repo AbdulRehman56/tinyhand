@@ -5,5 +5,8 @@
     <key name="toggle" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;h']</default></key>
     <key name="clear" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;x']</default></key>
     <key name="cycle" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;p']</default></key>
+    <key name="mode" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;d']</default></key>
+    <key name="undo" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;z']</default></key>
+    <key name="presentation" type="as"><default>['&lt;Control&gt;&lt;Alt&gt;s']</default></key>
   </schema>
 </schemalist>

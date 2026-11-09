@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const experimentSource = fs.readFileSync(path.join(__dirname, '../companion/tinyhand@abdulrehmankhan56/experimental.js'), 'utf8');
+const Experiment = new Function(`${experimentSource.replace(/^export /gm, '')}\nreturn {normalizeExperiment, appOverride, toolbarPosition};`)();
 
 const root = path.join(__dirname, '../companion/tinyhand@abdulrehmankhan56');
 const rawSource = fs.readFileSync(path.join(root, 'extension.js'), 'utf8');
@@ -14,7 +16,7 @@ let disk = {};
 let rawDisk = null;
 let pointer = [100, 100, 0];
 const context = vm.createContext({
-    Extension: class {}, TextDecoder, console,
+    Extension: class {}, TextDecoder, console, Experiment,
     Main: {overview: {visible: false}},
     global: {stage: {width: 1920, height: 1080}, display: {focus_window: null},
         get_pointer: () => pointer},
@@ -61,13 +63,13 @@ test('repeated runtime failures log only once per category', () => {
 });
 
 test('partial config falls back safely and clamps hand size', () => {
-    disk = {pointer: {size: 999}, ink: null, enabled: null, custom: 'preserve'};
+    disk = {pointer: {size: 999}, ink: null, enabled: null, futureSetting: 'preserve'};
     const config = new context.TinyHand()._readConfig();
     assert.equal(config.pointer.size, 0.20);
     assert.equal(config.pointer.style, 'lavender');
     assert.equal(config.ink.fade, 3);
     assert.equal(config.enabled, true);
-    assert.equal(config.custom, 'preserve');
+    assert.equal(config.futureSetting, 'preserve');
 });
 
 test('merge preserves unknown nested settings without sharing defaults', () => {
@@ -388,7 +390,7 @@ test('absent cursor and sound APIs degrade without preventing drawing', () => {
 
 const preferencesSource = fs.readFileSync(path.join(root, 'preferences.js'), 'utf8')
     .replace(/^import .*;\n/gm, '')
-    .replace('export function buildPreferences', 'function buildPreferences')
+    .replace(/^export /gm, '')
     .replaceAll('import.meta.url', "'file:///test/preferences.js'");
 for (const [name, Gtk, Adw] of [
     ['GTK before 4.8', {check_version: () => 'GTK too old'}, {SwitchRow: class {}}],

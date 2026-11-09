@@ -63,7 +63,7 @@ printf 'Installed hand and sound assets: %s\n' "$DATA_DIR/assets"
 # Native GTK4/libadwaita settings are usable independently of the Shell overlay.
 SETTINGS_SRC="$REPO_ROOT/linux/companion/$EXTENSION_ID"
 mkdir -p "$DATA_DIR/settings" "$HOME/.local/share/applications"
-cp "$SETTINGS_SRC/preferences.js" "$SETTINGS_SRC/settings.js" "$DATA_DIR/settings/"
+cp "$SETTINGS_SRC/preferences.js" "$SETTINGS_SRC/settings.js" "$SETTINGS_SRC/experimental.js" "$DATA_DIR/settings/"
 cat > "$BIN_DIR/tinyhand-settings" <<'EOF'
 #!/usr/bin/env sh
 exec gjs -m "$HOME/.local/share/tinyhand/settings/settings.js" "$@"

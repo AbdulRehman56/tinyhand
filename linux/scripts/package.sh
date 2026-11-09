@@ -53,7 +53,7 @@ mkdir -p "$DIST"
 STAGE=$(mktemp -d "$DIST/.package.XXXXXX")
 trap 'rm -rf -- "$STAGE"' EXIT
 mkdir -p "$STAGE/extension/schemas"
-for file in metadata.json extension.js prefs.js preferences.js; do
+for file in metadata.json extension.js prefs.js preferences.js experimental.js; do
   cp "$EXTENSION_SRC/$file" "$STAGE/extension/$file"
 done
 cp "$EXTENSION_SRC"/schemas/*.gschema.xml "$STAGE/extension/schemas/"
@@ -115,7 +115,7 @@ if ! $extension_only; then
   TARGET_DIR=$(cargo metadata --manifest-path "$LINUX_DIR/Cargo.toml" --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
   cp "$TARGET_DIR/release/tinyhand" "$BUNDLE/bin/tinyhand"
   cp -R "$STAGE/extension/assets" "$BUNDLE/share/tinyhand/assets"
-  cp "$EXTENSION_SRC/preferences.js" "$EXTENSION_SRC/settings.js" "$BUNDLE/share/tinyhand/settings/"
+  cp "$EXTENSION_SRC/preferences.js" "$EXTENSION_SRC/settings.js" "$EXTENSION_SRC/experimental.js" "$BUNDLE/share/tinyhand/settings/"
   cp "$STAGE/extension/LICENSE" "$STAGE/extension/CREDITS" "$BUNDLE/"
   cp "$SCRIPT_DIR/install-release.sh" "$BUNDLE/install.sh"
   cat > "$BUNDLE/bin/tinyhand-settings" <<'EOF'

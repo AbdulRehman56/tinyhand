@@ -3,6 +3,6 @@ import {buildPreferences} from './preferences.js';
 
 export default class TinyHandPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        buildPreferences(window);
+        buildPreferences(window, null, this.getSettings());
     }
 }

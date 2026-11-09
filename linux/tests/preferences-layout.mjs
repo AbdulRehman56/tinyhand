@@ -10,6 +10,7 @@ const configDir = `/tmp/opencode/tinyhand-layout.${GLib.uuid_string_random()}`;
 if (GLib.mkdir_with_parents(configDir, 0o700) !== 0)
     throw new Error('Cannot create isolated test settings directory');
 GLib.setenv('XDG_CONFIG_HOME', configDir, true);
+GLib.setenv('XDG_DATA_HOME', `${configDir}/data`, true);
 const app = new Adw.Application({application_id: 'io.github.AbdulRehman56.TinyHand.LayoutTest'});
 let failed = false;
 function assert(condition, message) {
@@ -38,7 +39,7 @@ app.connect('activate', () => {
             assert(sidebar && sidebar.get_height() >= 250, 'Sidebar is vertically clipped');
             const names = descendants(sidebar).filter(widget => widget instanceof Gtk.Label)
                 .map(widget => widget.label);
-            for (const name of ['General', 'Pointers', 'Appearance', 'Drawing', 'Sound'])
+            for (const name of ['General', 'Pointers', 'Appearance', 'Drawing', 'Sound', 'Toolkit', 'Profiles'])
                 assert(names.includes(name), `Missing sidebar section: ${name}`);
             for (const label of descendants(sidebar).filter(widget => widget instanceof Gtk.Label && names.includes(widget.label)))
                 assert(label.get_height() >= 16, `Clipped navigation label: ${label.label}`);
@@ -53,9 +54,10 @@ app.connect('activate', () => {
                 assert(child.get_width() > 0 && child.get_height() > 0, 'Selected card content is not allocated');
             const stack = widgets.find(widget => widget instanceof Gtk.Stack && widget.get_child_by_name('pointers'));
             assert(stack, 'Missing settings section stack');
-            for (const name of ['general', 'pointers', 'appearance', 'drawing', 'sound'])
+            for (const name of ['general', 'pointers', 'appearance', 'drawing', 'sound', 'toolkit', 'profiles'])
                 assert(stack.get_child_by_name(name), `Missing settings content: ${name}`);
             assert(GLib.get_user_config_dir() === configDir, 'Settings test is not isolated');
+            assert(GLib.get_user_data_dir() === `${configDir}/data`, 'Artwork test is not isolated');
             {
                 const configPath = `${GLib.get_user_config_dir()}/tinyhand/config.json`;
                 const read = () => new TextDecoder().decode(GLib.file_get_contents(configPath)[1]);
@@ -168,8 +170,8 @@ app.connect('activate', () => {
                 assert(node, 'Cannot snapshot settings workspace');
                 window.get_renderer().render_texture(node, null).save_to_png(ARGV[0]);
             }
-            print(`PASS: five sidebar sections visible; sidebar ${sidebar.get_width()}x${sidebar.get_height()}; 37 pointers in at least three columns.`);
-            const pageNames = ['general', 'appearance', 'drawing', 'sound'];
+            print(`PASS: seven sidebar sections visible; sidebar ${sidebar.get_width()}x${sidebar.get_height()}; 37 pointers in at least three columns.`);
+            const pageNames = ['general', 'appearance', 'drawing', 'sound', 'toolkit', 'profiles'];
             let index = 0;
             stack.set_visible_child_name(pageNames[index]);
             checkingPages = true;
