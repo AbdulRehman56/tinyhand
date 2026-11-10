@@ -883,23 +883,49 @@ export default class TinyHandExtension extends Extension {
             const end = clamp(Math.floor(g.rodEnd * pixbuf.height), wrist + 1, pixbuf.height);
             // Cairo loads PNGs directly. Never import Gdk/Gtk/Adw into Shell.
             const source = cairo.ImageSurface.createFromPNG(path);
-            const surface = (y, height, shadow = false) => {
-                const image = new cairo.ImageSurface(cairo.Format.ARGB32, pixbuf.width, height);
+            // Sprites are mostly transparent margin (the rod is ~13% of the width); painting
+            // that margin rotated and stretched every frame dominates the cost, so crop it.
+            const columns = (y0, y1) => {
+                const pixels = pixbuf.get_pixels(), stride = pixbuf.rowstride, channels = pixbuf.n_channels;
+                let first = pixbuf.width, last = -1;
+                for (let y = y0; y < y1; y++) {
+                    for (let x = 0; x < first; x++) {
+                        if (!pixbuf.has_alpha || pixels[y * stride + x * channels + channels - 1] >= 8) {
+                            first = x;
+                            break;
+                        }
+                    }
+                    for (let x = pixbuf.width - 1; x > last; x--) {
+                        if (!pixbuf.has_alpha || pixels[y * stride + x * channels + channels - 1] >= 8) {
+                            last = x;
+                            break;
+                        }
+                    }
+                }
+                if (last < first) return {x: 0, width: pixbuf.width};
+                const x = Math.max(0, first - 2);
+                return {x, width: Math.min(pixbuf.width, last + 3) - x};
+            };
+            const surface = (y, height, {x, width}, shadow = false) => {
+                const image = new cairo.ImageSurface(cairo.Format.ARGB32, width, height);
                 const cr = new cairo.Context(image);
                 if (shadow) {
                     cr.setSourceRGBA(0, 0, 0, 1);
-                    cr.maskSurface(source, 0, -y);
+                    cr.maskSurface(source, -x, -y);
                 } else {
-                    cr.setSourceSurface(source, 0, -y);
+                    cr.setSourceSurface(source, -x, -y);
                     cr.paint();
                 }
                 cr.$dispose();
                 return image;
             };
             const slice = (image, y, height) => image.new_subpixbuf(0, y, image.width, height);
+            const handColumns = columns(top, wrist), rodColumns = columns(wrist, end);
             asset = {g, width: pixbuf.width, hand: slice(pixbuf, top, wrist - top),
-                surfaceHand: surface(top, wrist - top), surfaceRod: surface(wrist, end - wrist),
-                shadowHand: surface(top, wrist - top, true), shadowRod: surface(wrist, end - wrist, true)};
+                handX: handColumns.x, rodX: rodColumns.x,
+                surfaceHand: surface(top, wrist - top, handColumns), surfaceRod: surface(wrist, end - wrist, rodColumns),
+                shadowHand: surface(top, wrist - top, handColumns, true),
+                shadowRod: surface(wrist, end - wrist, rodColumns, true)};
         } catch (error) {
             this._warn(`cannot load hand ${style}`, error);
         }
@@ -1089,16 +1115,25 @@ export default class TinyHandExtension extends Extension {
         // impossible without changing the specified grip, hand size or minimum.
         const rodLen = Math.max(0.05 * H, along - handTipPts);
         const rotation = Math.atan2(dy, dx) - Math.atan2(-(rodLen + handTipPts), tipOffX);
+        const scaled = this._scaledAsset(asset, widthPts / (1 - 0.06 * this._press));
+        const pts = widthPts / asset.width;
         const draw = (hand, rod, alpha, offsetX = 0, offsetY = 0) => {
             cr.save();
             cr.translate(gx, gy);
             cr.translate(offsetX, offsetY);
             cr.rotate(rotation);
-            for (const [image, y, height] of [[rod, -rodLen, rodLen], [hand, -rodLen - handPts, handPts]]) {
+            for (const [image, source, sourceX, y, height] of [[rod, asset.surfaceRod, asset.rodX, -rodLen, rodLen],
+                [hand, asset.surfaceHand, asset.handX, -rodLen - handPts, handPts]]) {
                 cr.save();
-                cr.translate(-g.rodX * widthPts, y);
-                cr.scale(widthPts / asset.width, height / image.getHeight());
+                // Surfaces are cropped; place them where their columns sat in the full sprite.
+                cr.translate((sourceX - g.rodX * asset.width) * pts, y);
+                cr.scale(source.getWidth() * pts / image.getWidth(), height / image.getHeight());
                 cr.setSourceSurface(image, 0, 0);
+                // Sources are pre-scaled to near display size; bilinear is cheap and sharp enough here.
+                cr.getSource().setFilter(cairo.Filter.BILINEAR);
+                // Without a clip, a rotated paint composites across the whole stage-sized canvas.
+                cr.rectangle(0, 0, image.getWidth(), image.getHeight());
+                cr.clip();
                 cr.paintWithAlpha(alpha);
                 cr.restore();
             }
@@ -1109,9 +1144,32 @@ export default class TinyHandExtension extends Extension {
             const angle = -rotation;
             const sx = lift * 0.6 * Math.cos(angle) - lift * Math.sin(angle);
             const sy = lift * 0.6 * Math.sin(angle) + lift * Math.cos(angle);
-            draw(asset.shadowHand, asset.shadowRod, 0.26 + 0.02 * this._press, sx, sy);
+            draw(scaled.shadowHand, scaled.shadowRod, 0.26 + 0.02 * this._press, sx, sy);
         }
-        draw(asset.surfaceHand, asset.surfaceRod, 1);
+        draw(scaled.surfaceHand, scaled.surfaceRod, 1);
+    }
+
+    // Downscaling the full-resolution sprites with Cairo's default filter on every
+    // frame costs ~15 ms on large stages and stalls the Shell; cache them at display size.
+    _scaledAsset(asset, widthPts) {
+        const scale = this._area?.get_resource_scale?.() ?? 1;
+        const width = clamp(Math.ceil(widthPts * scale), 1, asset.width);
+        if (asset.scaled?.width === width) return asset.scaled;
+        const ratio = width / asset.width;
+        const shrink = image => {
+            const outWidth = Math.max(1, Math.round(image.getWidth() * ratio));
+            const height = Math.max(1, Math.round(image.getHeight() * ratio));
+            const out = new cairo.ImageSurface(cairo.Format.ARGB32, outWidth, height);
+            const cr = new cairo.Context(out);
+            cr.scale(outWidth / image.getWidth(), height / image.getHeight());
+            cr.setSourceSurface(image, 0, 0);
+            cr.paint();
+            cr.$dispose();
+            return out;
+        };
+        asset.scaled = {width, surfaceHand: shrink(asset.surfaceHand), surfaceRod: shrink(asset.surfaceRod),
+            shadowHand: shrink(asset.shadowHand), shadowRod: shrink(asset.shadowRod)};
+        return asset.scaled;
     }
 
     disable() {
