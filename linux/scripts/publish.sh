@@ -77,7 +77,7 @@ if marker not in source:
 section = '''## Experimental Linux port
 
 An optional Linux implementation is available in [linux/](./linux/README.md):
-a GNOME Shell 45–50 companion for Wayland and a Rust X11 app, with visual settings
+a GNOME Shell 45–51 companion for Wayland and a Rust X11 app, with visual settings
 and per-user installation. GNOME 45–49 are experimental (API/mocks only); 50.1 is
 the only desktop-tested version. Settings need GTK 4.8+ and libadwaita 1.4+.
 See the compatibility assessment for limits; full macOS parity remains incomplete.
@@ -110,14 +110,14 @@ else
   printf 'Upstream PR is paused; its branch and draft are unchanged.\n'
 fi
 gh repo edit AbdulRehman56/tinyhand --default-branch linux-port \
-  --description 'Independent Linux port of TinyHand by Kamran Ahmed (@nilbuild). GNOME 45-50 (45-49 experimental) and X11.'
+  --description 'Independent Linux port of TinyHand by Kamran Ahmed (@nilbuild). GNOME 45-51 (45-49 experimental) and X11.'
 if $include_upstream; then
 pr_url=$(gh api 'repos/nilbuild/tinyhand/pulls?state=open&head=AbdulRehman56%3Alinux-port-upstream' \
   --jq '.[0].html_url // empty')
 if [[ -z "$pr_url" ]]; then
   pr_url=$(gh pr create --repo nilbuild/tinyhand --base main \
     --head AbdulRehman56:linux-port-upstream --draft \
-    --title 'Add experimental Linux port (GNOME 45-50 and X11)' \
+    --title 'Add experimental Linux port (GNOME 45-51 and X11)' \
     --body-file linux/UPSTREAM_PR.md)
 fi
 printf 'Upstream PR: %s\n' "$pr_url"

@@ -397,7 +397,7 @@ export default class TinyHandExtension extends Extension {
 
     _createToolbar() {
         this._toolbar = new St.BoxLayout({
-            vertical: false, reactive: true, style_class: 'tinyhand-toolbar',
+            reactive: true, style_class: 'tinyhand-toolbar',
             style: 'background-color: rgba(28,28,32,0.94); color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 16px; padding: 8px 10px; spacing: 6px;',
         });
         this._hint = new St.Label({reactive: false, visible: false,

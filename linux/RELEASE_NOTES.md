@@ -1,5 +1,15 @@
 # Linux release notes
 
+## v1.0.2-linux.6 — GNOME 51 support
+
+- Declare GNOME Shell 51 in `metadata.json`; 51 previously marked the extension OUT OF DATE.
+- Drop the toolbar's `vertical: false` `St.BoxLayout` property, which GNOME 51 removed
+  (it was deprecated in 48). Horizontal is the default, so 45–50 behave as before.
+- Add a GNOME 51 API-shape mock and a regression check against the removed property.
+- Verified locally: Node companion checks and a real isolated GNOME Shell 51.1 load,
+  config reload, toolbar rebuild/collapse and disable/re-enable. Hands-on input on 51
+  has not been broadly tested.
+
 ## v1.0.2-linux.5 — experimental GNOME toolkit
 
 - Add opt-in spotlight, click ripples and a privacy-restricted shortcut display
