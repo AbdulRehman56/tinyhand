@@ -54,10 +54,10 @@ Never run the X11 app and companion simultaneously.
 - Describe the problem, the change, and how to reproduce or verify it.
 - State your distribution, session (GNOME Wayland or X11), GNOME Shell version, display
   scaling/monitor setup, and relevant extension conflicts.
-- List exact checks run, results, and untested scope. Metadata targets GNOME 45–50;
+- List exact checks run, results, and untested scope. Metadata targets GNOME 45–51;
   45–49 remain experimental with versioned API/mocked coverage, never claimed as
-  desktop-tested. GNOME 50.1 is the only desktop used in development; the latest
-  changes have not been hot-loaded. Follow [COMPATIBILITY.md](./COMPATIBILITY.md)
+  desktop-tested. GNOME 50.1 is the only desktop used in development; 51.1 has
+  only the isolated `linux/tests/shell-smoke.py` check. Follow [COMPATIBILITY.md](./COMPATIBILITY.md)
   before promoting a version or raising the GTK/libadwaita minimums.
 - For interaction changes, test Point/Draw, Alt pass-through, cursor restoration,
   shortcuts, settings persistence, enable/disable, and sound where applicable.

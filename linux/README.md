@@ -7,9 +7,9 @@ TinyHand is a tiny hand on a stick that points at things on your screen: click t
 | Session | Mode |
 | --- | --- |
 | Xorg/X11 | The Rust app, `tinyhand`, hides the real cursor, swallows clicks for tapping/drawing, lets panels/dock areas pass through, and provides a StatusNotifier tray menu (toggle / next hand / clear / quit). Hold Alt to interact normally. |
-| GNOME Wayland (45–50; 45–49 experimental) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. |
+| GNOME Wayland (45–51; 45–49 experimental) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. |
 
-Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental prerelease; GNOME 50.1 is the only desktop-tested version. The toolkit additionally passed an isolated real GNOME 50.1 load/config-reload/disable/re-enable test; hands-on input and mixed-DPI testing remain limited. See [COMPATIBILITY.md](./COMPATIBILITY.md) for the version matrix, library minimums and testing limits.
+Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental prerelease; GNOME 50.1 is the only desktop-tested version. The toolkit additionally passed isolated real GNOME 50.1 and 51.1 load/config-reload/disable/re-enable tests; hands-on input and mixed-DPI testing remain limited. See [COMPATIBILITY.md](./COMPATIBILITY.md) for the version matrix, library minimums and testing limits.
 
 ## Install
 

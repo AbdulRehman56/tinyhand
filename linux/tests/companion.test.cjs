@@ -30,8 +30,12 @@ test('metadata uses the GNOME integer version format', () => {
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'metadata.json')));
     assert.equal(Number.isInteger(metadata.version), true);
     assert.equal(metadata.name, 'TinyHand');
-    assert.ok(metadata['shell-version'].includes('50'));
+    assert.ok(metadata['shell-version'].includes('51'));
     assert.match(metadata['version-name'], /^[A-Za-z0-9. ]+$/, 'GNOME store rejects hyphenated version names');
+});
+
+test('Shell widgets avoid the St.BoxLayout vertical property removed in GNOME 51', () => {
+    assert.ok(!/\bvertical\s*:/.test(rawSource));
 });
 
 test('Shell entry point never imports GTK libraries', () => {
@@ -340,7 +344,7 @@ function versionFixture(version, initiallyVisible = true) {
     return {ext, tracker, calls, context, visible: () => visible, inhibits: () => inhibits};
 }
 
-for (const version of [45, 46, 47, 48, 49, 50]) {
+for (const version of [45, 46, 47, 48, 49, 50, 51]) {
     test(`GNOME ${version} API shape: lookup, cursor restoration, sound and disable`, () => {
         const fixture = versionFixture(version);
         const {ext, tracker, calls} = fixture;

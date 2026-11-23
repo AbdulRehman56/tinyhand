@@ -1,11 +1,12 @@
 # GNOME compatibility and maintenance
 
-The extension targets GNOME Shell **45–50**. **45–49 are experimental**: their
+The extension targets GNOME Shell **45–51**. **45–49 are experimental**: their
 versioned APIs were inspected and our fallbacks are covered by automated mocks,
 but those desktops have not been run or tested here. GNOME **50.1** is the only
 desktop used during development. The toolkit additionally passed a separate real
 GNOME 50.1 session's load, atomic-config-reload, toolbar-rebuild and disable/re-enable
-checks. This does not establish hands-on input or mixed-DPI compatibility. No
+checks, and the same isolated checks pass on a real GNOME **51.1** Shell. This does
+not establish hands-on input or mixed-DPI compatibility. No
 cross-distribution or full macOS parity claim is made.
 
 ## Versioned API assessment
@@ -18,6 +19,7 @@ cross-distribution or full macOS parity claim is made.
 | 48 | `global.backend.get_cursor_tracker()` | Legacy setter | Versioned headers + mock; no live test |
 | 49 | Backend lookup | Balanced `inhibit_cursor_visibility` / `uninhibit_cursor_visibility` | Versioned headers + mock; no live test |
 | 50 | Backend lookup | Balanced inhibitor | Versioned headers + mock; installed Mutter 18 API check; 50.1 desktop development and separate real-Shell toolkit smoke test |
+| 51 | Backend lookup | Balanced inhibitor | Mock; isolated real 51.1 Shell smoke test (load, config reload, toolbar rebuild, disable/re-enable) |
 
 The adapter detects capabilities, rather than parsing a distribution's version
 string. It prefers the backend lookup, falls back to the display API, and keeps
@@ -27,7 +29,7 @@ The legacy setter restores the visibility observed before TinyHand hid it;
 it cannot coordinate concurrent cursor changes as reliably as the new inhibitor.
 Disable cursor hiding in settings if another extension controls cursor visibility.
 
-All six Mutter versions expose the same sound call:
+All seven Mutter versions expose the same sound call:
 `display.get_sound_player().play_from_file(file, description, cancellable)`.
 No guessed argument-count fallback is used. Full-volume taps use this native API;
 reduced-volume taps use bounded `paplay` subprocesses because the native call has no
@@ -36,7 +38,9 @@ drawing. The cancellable and remaining audio subprocesses are cleaned up during 
 
 Shell code uses Cairo and GdkPixbuf, never imports GTK/Gdk/libadwaita, and draws
 through `St.DrawingArea`'s repaint/context APIs. Those APIs were checked in the
-45.0 and 50.0 headers. ESM extension and preference entry points are available
+45.0 and 50.0 headers. GNOME 51 removed `St.BoxLayout`'s deprecated `vertical`
+property (replaced by `orientation` in 48); the toolbar relies on the default
+horizontal orientation so the same code works on 45–51. ESM extension and preference entry points are available
 from GNOME 45. Preferences open through the extension's `openPreferences()`.
 
 ## Preferences baseline
@@ -55,7 +59,7 @@ assumed compatible with older Shell preferences hosts.
 
 ## Checks and release policy
 
-- `node linux/tests/companion.test.cjs` runs each 45–50 API shape through lookup,
+- `node linux/tests/companion.test.cjs` runs each 45–51 API shape through lookup,
   cursor hiding/restoration, sound arguments and repeated disable. It also tests
   preservation of an already hidden cursor, absent APIs, and dependency errors.
 - Rust tests and rendering self-tests exercise the independent X11 implementation.

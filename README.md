@@ -16,9 +16,9 @@ This independent, open-source Linux fork is maintained by
 ## Linux status
 
 **Experimental preview, not full macOS parity.** The GNOME companion targets Shell
-**45–50**. GNOME **45–49 are experimental**, based on versioned API checks and mocks;
-they have not been desktop-tested. **50.1 is the only desktop-tested version**; the
-latest compatibility changes have not been hot-loaded into that session.
+**45–51**. GNOME **45–49 are experimental**, based on versioned API checks and mocks;
+they have not been desktop-tested. **50.1 is the only desktop-tested version**;
+**51.1** passed an isolated real-Shell load/reload/disable smoke test only.
 See the [compatibility assessment](./linux/COMPATIBILITY.md) for evidence and limits.
 The Rust X11 app is also experimental.
 
