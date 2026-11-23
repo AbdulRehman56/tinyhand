@@ -24,7 +24,7 @@ const context = vm.createContext({
         file_get_contents: () => [true, Buffer.from(rawDisk ?? JSON.stringify(disk))],
         file_test: () => true, FileTest: {EXISTS: 1}},
 });
-vm.runInContext(`${source}\nthis.TinyHand = TinyHandExtension; this.mergeConfig = merge; this.readConfigJson = readJson;`, context);
+vm.runInContext(`${source}\nthis.TinyHand = TinyHandExtension; this.mergeConfig = merge; this.readConfigJson = readJson; this.acceleratorLabel = acceleratorLabel;`, context);
 
 test('metadata uses the GNOME integer version format', () => {
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'metadata.json')));
@@ -275,6 +275,34 @@ test('Draw mode captures pointer input; Alt releases it and restores cursor', ()
     assert.equal(ext._area.reactive, false);
     assert.equal(ext._active, null);
     assert.equal(ext.cursorHidden, false);
+});
+
+test('open top bar menu suspends Draw capture like the macOS menu', () => {
+    pointer = [100, 100, 0x100];
+    const ext = tickingExtension('draw');
+    ext._indicator = {menu: {isOpen: true}};
+    ext._tick();
+    assert.equal(ext._area.reactive, false);
+    assert.equal(ext._strokes.length, 0);
+    assert.equal(ext.cursorHidden, false);
+});
+
+test('top bar icon stays clickable in Draw mode', () => {
+    pointer = [100, 10, 0x100];
+    const ext = tickingExtension('draw');
+    ext._indicator = {visible: true, menu: {isOpen: false},
+        get_transformed_position: () => [90, 0], get_transformed_size: () => [30, 32]};
+    ext._overControls = (x, y) => ext._overActor(ext._indicator, x, y);
+    ext._tick();
+    assert.equal(ext._area.reactive, false);
+    assert.equal(ext._strokes.length, 0);
+});
+
+test('top bar menu shows GNOME accelerators readably', () => {
+    assert.equal(context.acceleratorLabel('<Control><Alt>h'), 'Ctrl+Alt+H');
+    assert.equal(context.acceleratorLabel('<Super><Shift>F5'), 'Super+Shift+F5');
+    assert.equal(context.acceleratorLabel(''), '');
+    assert.equal(context.acceleratorLabel(undefined), '');
 });
 
 for (const [name, appId, title, captured] of [

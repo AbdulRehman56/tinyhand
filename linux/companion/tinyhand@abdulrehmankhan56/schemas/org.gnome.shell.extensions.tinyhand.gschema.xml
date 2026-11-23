@@ -8,5 +8,6 @@
     <key name="undo" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;z'</default><summary>Undo last stroke</summary></key>
     <key name="presentation" type="s"><default>'&lt;Control&gt;&lt;Alt&gt;s'</default><summary>Toggle presentation mode</summary></key>
     <key name="show-toolbar" type="b"><default>true</default><summary>Show the floating toolbar</summary></key>
+    <key name="show-indicator" type="b"><default>true</default><summary>Show the top bar icon</summary></key>
   </schema>
 </schemalist>

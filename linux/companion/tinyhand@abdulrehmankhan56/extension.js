@@ -1,5 +1,7 @@
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -39,6 +41,13 @@ const STYLE_INK = {
     laser: 'red',
 };
 const BINDINGS = ['toggle', 'clear', 'cycle', 'mode', 'undo', 'presentation'];
+// '<Control><Alt>h' -> 'Ctrl+Alt+H' for menu hints; GTK's formatter is unavailable in Shell.
+const acceleratorLabel = accelerator => {
+    const names = {Control: 'Ctrl', Primary: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Super: 'Super'};
+    const modifiers = [...(accelerator ?? '').matchAll(/<(\w+)>/g)].map(([, name]) => names[name] ?? name);
+    const key = (accelerator ?? '').replace(/<\w+>/g, '');
+    return key ? [...modifiers, key.length === 1 ? key.toUpperCase() : key].join('+') : '';
+};
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const now = () => GLib.get_monotonic_time() / 1e6;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -164,9 +173,11 @@ export default class TinyHandExtension extends Extension {
                 this._bound.push(name);
             }
             this._connect(this._settings, 'changed::show-toolbar', () => this._visibility());
+            this._connect(this._settings, 'changed::show-indicator', () => this._syncIndicator());
         } catch (error) {
             this._warn('compile/install the settings schema to enable shortcuts', error);
         }
+        this._syncIndicator();
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._configPath), 0o700);
             this._monitor = Gio.File.new_for_path(GLib.path_get_dirname(this._configPath))
@@ -537,13 +548,88 @@ export default class TinyHandExtension extends Extension {
         }
     }
 
+    _syncIndicator() {
+        // A stale compiled schema lacks the key; reading it would abort the Shell.
+        const wanted = this._settings?.settings_schema?.has_key('show-indicator')
+            ? this._settings.get_boolean('show-indicator') : true;
+        if (wanted && !this._indicator) this._createIndicator();
+        else if (!wanted) this._destroyIndicator();
+    }
+
+    // Mirrors the macOS menu bar item: primary click toggles, secondary click opens the menu.
+    _createIndicator() {
+        try {
+            const indicator = new PanelMenu.Button(0.0, 'TinyHand', false);
+            this._indicatorIcon = new St.Icon({style_class: 'system-status-icon'});
+            indicator.add_child(this._indicatorIcon);
+            indicator.connect('captured-event', (_actor, event) => {
+                if (event.type() !== Clutter.EventType.BUTTON_PRESS || event.get_button() !== Clutter.BUTTON_PRIMARY ||
+                    (event.get_state() & Clutter.ModifierType.CONTROL_MASK))
+                    return Clutter.EVENT_PROPAGATE;
+                indicator.menu.close();
+                this._toggle();
+                return Clutter.EVENT_STOP;
+            });
+            const shortcutItem = (callback) => {
+                const item = new PopupMenu.PopupMenuItem('');
+                const hint = new St.Label({x_expand: true, x_align: Clutter.ActorAlign.END, opacity: 150});
+                item.add_child(hint);
+                item.connect('activate', callback);
+                return {item, hint};
+            };
+            this._indicatorToggle = shortcutItem(() => this._toggle());
+            this._indicatorClear = shortcutItem(() => this._clear());
+            this._indicatorClear.item.label.text = 'Clear Drawing';
+            this._indicatorSound = new PopupMenu.PopupSwitchMenuItem('Tap Sound', this._config.sound.hand);
+            this._indicatorSound.connect('toggled', (_item, state) => this._update({sound: {hand: state}}));
+            const menu = indicator.menu;
+            menu.addMenuItem(this._indicatorToggle.item);
+            menu.addMenuItem(this._indicatorClear.item);
+            menu.addMenuItem(this._indicatorSound);
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            menu.addAction('Settings…', () => this._openSettings());
+            menu.connect('open-state-changed', (_menu, open) => {
+                if (open) this._refreshIndicator();
+            });
+            this._indicator = indicator;
+            Main.panel.addToStatusArea(this.uuid, indicator);
+            this._refreshIndicator();
+        } catch (error) {
+            this._destroyIndicator();
+            this._warn('top bar icon unavailable', error);
+        }
+    }
+
+    _refreshIndicator() {
+        if (!this._indicator) return;
+        const on = this._config.enabled;
+        this._indicatorIcon.gicon = Gio.icon_new_for_string(
+            GLib.build_filenamev([this.path, 'icons', `tinyhand-${on ? 'on' : 'off'}-symbolic.svg`]));
+        this._indicator.accessible_name = on ? 'TinyHand is on' : 'TinyHand is off';
+        this._indicatorToggle.item.label.text = on ? 'Turn Pointer Off' : 'Turn Pointer On';
+        this._indicatorToggle.hint.text = acceleratorLabel(this._settings?.get_string('toggle'));
+        this._indicatorClear.hint.text = acceleratorLabel(this._settings?.get_string('clear'));
+        this._indicatorSound.setToggleState(this._config.sound.hand);
+    }
+
+    _destroyIndicator() {
+        this._indicator?.destroy();
+        this._indicator = null;
+        this._indicatorIcon = null;
+        this._indicatorToggle = null;
+        this._indicatorClear = null;
+        this._indicatorSound = null;
+    }
+
     _overControls(x, y) {
-        return [this._toolbar, this._inkTray].some(actor => {
-            if (!actor?.visible) return false;
-            const [left, top] = actor.get_transformed_position();
-            const [width, height] = actor.get_transformed_size();
-            return x >= left && y >= top && x <= left + width && y <= top + height;
-        });
+        return [this._toolbar, this._inkTray, this._indicator].some(actor => this._overActor(actor, x, y));
+    }
+
+    _overActor(actor, x, y) {
+        if (!actor?.visible) return false;
+        const [left, top] = actor.get_transformed_position();
+        const [width, height] = actor.get_transformed_size();
+        return x >= left && y >= top && x <= left + width && y <= top + height;
     }
 
     _getCursorTracker() {
@@ -628,6 +714,7 @@ export default class TinyHandExtension extends Extension {
             if (child instanceof St.Button) child.style = this._buttonCss();
         }
         if (this._toolButton) this._toolButton.child.text = ({freehand: 'Pen', line: 'Line', arrow: 'Arrow'})[this._config.ink.tool];
+        this._refreshIndicator();
         this._soundIcon.icon_name = this._config.sound.hand ? 'audio-volume-high-symbolic' : 'audio-volume-muted-symbolic';
         this._modeIcon.icon_name = this._config.interaction.mode === 'draw' ? 'draw-freehand-symbolic' : 'input-mouse-symbolic';
         this._modeButton.style = this._buttonCss() +
@@ -693,7 +780,9 @@ export default class TinyHandExtension extends Extension {
         const overToolbar = this._overControls(x, y);
         const settingsFocused = appId.toLowerCase().includes('tinyhand') ||
             (appId === 'org.gnome.Shell.Extensions' && window?.get_title?.() === 'TinyHand Settings');
-        const interacting = (mods & 0x8) !== 0 || settingsFocused || Main.overview.visible;
+        // Like macOS suspendInput: the top bar menu and icon must stay clickable in Draw mode.
+        const indicatorBusy = this._indicator?.menu?.isOpen || (overToolbar && this._overActor(this._indicator, x, y));
+        const interacting = (mods & 0x8) !== 0 || settingsFocused || Main.overview.visible || indicatorBusy;
         if (interacting && this._drag) {
             this._cancelDrag();
             this._positionToolbar();
@@ -1193,6 +1282,7 @@ export default class TinyHandExtension extends Extension {
         this._monitor?.cancel();
         this._monitor = null;
         for (const name of this._bound ?? []) Main.wm.removeKeybinding(name);
+        this._destroyIndicator();
         this._area?.destroy();
         this._inkDot?.destroy();
         this._modeIcon?.destroy();

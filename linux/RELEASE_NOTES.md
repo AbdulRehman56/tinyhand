@@ -1,6 +1,12 @@
 # Linux release notes
 
-## v1.0.2-linux.6 — GNOME 51 support
+## v1.0.2-linux.6 — GNOME 51 support and top bar icon
+
+- Add a GNOME top bar icon matching the macOS menu bar item: left-click turns the
+  pointer on/off (filled/outline icon), right-click or Ctrl+click opens a menu with the
+  toggle and Clear Drawing (with their shortcuts), Tap Sound and Settings. The menu and
+  icon stay clickable in Draw mode. Hide it with the `show-indicator` GSettings key.
+  The macOS Quit and Accessibility items have no extension equivalent and are omitted.
 
 - Declare GNOME Shell 51 in `metadata.json`; 51 previously marked the extension OUT OF DATE.
 - Drop the toolbar's `vertical: false` `St.BoxLayout` property, which GNOME 51 removed
