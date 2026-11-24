@@ -15,8 +15,9 @@ const source = new TextDecoder().decode(bytes)
     .replace(/^import .*;\n/gm, '')
     .replace('export default class TinyHandExtension', 'class TinyHandExtension');
 const stage = {width: 1920, height: 1080};
-const TinyHand = new Function('Extension', 'GLib', 'Gio', 'GdkPixbuf', 'cairo', 'global', 'Experiment',
-    `${source}\nreturn TinyHandExtension;`)(class {}, GLib, Gio, GdkPixbuf, cairo, {stage}, Experiment);
+const Main = {layoutManager: {monitors: [{index: 0, x: 0, y: 0, ...stage}]}};
+const TinyHand = new Function('Extension', 'GLib', 'Gio', 'GdkPixbuf', 'cairo', 'global', 'Experiment', 'Main',
+    `${source}\nreturn TinyHandExtension;`)(class {}, GLib, Gio, GdkPixbuf, cairo, {stage}, Experiment, Main);
 const ext = new TinyHand();
 ext._assetDir = assetsRoot;
 ext._assets = new Map();

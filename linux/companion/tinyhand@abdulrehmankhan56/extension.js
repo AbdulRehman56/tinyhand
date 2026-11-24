@@ -757,6 +757,14 @@ export default class TinyHandExtension extends Extension {
         this._sources.add(id);
     }
 
+    // macOS sizes and anchors the pointer per screen; the stage spans every monitor,
+    // so its height would inflate the hand on multi-monitor layouts.
+    _monitorAt(x, y) {
+        return Main.layoutManager?.monitors?.find(monitor => x >= monitor.x && y >= monitor.y &&
+            x < monitor.x + monitor.width && y < monitor.y + monitor.height) ??
+            Main.layoutManager?.primaryMonitor ?? {x: 0, y: 0, width: global.stage.width, height: global.stage.height};
+    }
+
     _tick() {
         const [x, y, mods] = global.get_pointer();
         const held = (mods & 0x100) !== 0;
@@ -807,10 +815,10 @@ export default class TinyHandExtension extends Extension {
             if (this._press < 0.002) this._press = 0;
         }
         if (this._config.accessibility?.reducedMotion) this._press = 0;
-        const W = global.stage.width;
+        const {x: X, width: W} = this._monitorAt(x, y);
         // Left-handed mode mirrors the grip: the rod comes in from the lower left.
-        const target = this._config.pointer.leftHanded
-            ? clamp(x - 0.30 * W, -0.05 * W, 0.85 * W) : clamp(x + 0.30 * W, 0.15 * W, 1.05 * W);
+        const target = X + (this._config.pointer.leftHanded
+            ? clamp(x - X - 0.30 * W, -0.05 * W, 0.85 * W) : clamp(x - X + 0.30 * W, 0.15 * W, 1.05 * W));
         this._gripX = this._gripX === null || this._config.accessibility?.reducedMotion
             ? target : this._gripX + (target - this._gripX) * 0.08;
         const settling = Math.abs(target - this._gripX) > 0.5;
@@ -1154,7 +1162,7 @@ export default class TinyHandExtension extends Extension {
                 this._customSurface = cairo.ImageSurface.createFromPNG(path);
             }
             const surface = this._customSurface;
-            const height = global.stage.height * this._config.pointer.size;
+            const height = this._monitorAt(...this._last).height * this._config.pointer.size;
             const scale = height / surface.getHeight();
             const width = surface.getWidth() * scale;
             cr.save();
@@ -1173,7 +1181,8 @@ export default class TinyHandExtension extends Extension {
 
     _paintLaser(cr) {
         const [x, y] = this._last;
-        const r = Math.max(4, global.stage.height * 0.0038 * this._config.pointer.size / 0.13) * (1 + 0.2 * this._press);
+        const r = Math.max(4, this._monitorAt(x, y).height * 0.0038 * this._config.pointer.size / 0.13) *
+            (1 + 0.2 * this._press);
         const glow = new cairo.RadialGradient(x, y, 0, x, y, r * 3.2);
         glow.addColorStopRGBA(0, 1, 40 / 255, 30 / 255, 0.43);
         glow.addColorStopRGBA(1, 1, 40 / 255, 30 / 255, 0);
@@ -1193,16 +1202,17 @@ export default class TinyHandExtension extends Extension {
         const asset = this._asset(this._config.pointer.style);
         if (!asset || this._gripX === null) return;
         const g = asset.g;
-        const H = global.stage.height, W = global.stage.width;
-        // Left-handed mode paints the right-handed pose mirrored about the stage centre.
+        const {x: X, y: Y, width: W, height: H} = this._monitorAt(...this._last);
+        // Left-handed mode paints the right-handed pose mirrored about the monitor centre.
         const mirror = this._config.pointer.leftHanded;
+        const flip = px => 2 * X + W - px;
         const handPts = this._config.pointer.size * H * (1 - 0.06 * this._press);
         const s = handPts / (g.wrist - g.handTop);
         const widthPts = s * g.aspect;
         const handTipPts = (g.wrist - g.tip) * s;
         const tipOffX = (g.tipX - g.rodX) * widthPts;
-        const gx = mirror ? W - this._gripX : this._gripX, gy = 1.12 * H;
-        const dx = (mirror ? W - this._last[0] : this._last[0]) - gx, dy = this._last[1] - gy;
+        const gx = mirror ? flip(this._gripX) : this._gripX, gy = Y + 1.12 * H;
+        const dx = (mirror ? flip(this._last[0]) : this._last[0]) - gx, dy = this._last[1] - gy;
         const reach = Math.hypot(dx, dy);
         const along = Math.sqrt(Math.max(0, reach * reach - tipOffX * tipOffX));
         // Preserve the native minimum length. If this clamp binds (e.g. the
@@ -1214,8 +1224,11 @@ export default class TinyHandExtension extends Extension {
         const pts = widthPts / asset.width;
         const draw = (hand, rod, alpha, offsetX = 0, offsetY = 0) => {
             cr.save();
+            // Like the per-screen macOS overlay, keep the rod off neighbouring monitors.
+            cr.rectangle(X, Y, W, H);
+            cr.clip();
             if (mirror) {
-                cr.translate(W, 0);
+                cr.translate(2 * X + W, 0);
                 cr.scale(-1, 1);
             }
             cr.translate(gx, gy);
