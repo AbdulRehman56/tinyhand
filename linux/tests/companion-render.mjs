@@ -15,8 +15,9 @@ const source = new TextDecoder().decode(bytes)
     .replace(/^import .*;\n/gm, '')
     .replace('export default class TinyHandExtension', 'class TinyHandExtension');
 const stage = {width: 1920, height: 1080};
-const TinyHand = new Function('Extension', 'GLib', 'Gio', 'GdkPixbuf', 'cairo', 'global', 'Experiment',
-    `${source}\nreturn TinyHandExtension;`)(class {}, GLib, Gio, GdkPixbuf, cairo, {stage}, Experiment);
+const Main = {layoutManager: {monitors: [{index: 0, x: 0, y: 0, ...stage}]}};
+const TinyHand = new Function('Extension', 'GLib', 'Gio', 'GdkPixbuf', 'cairo', 'global', 'Experiment', 'Main',
+    `${source}\nreturn TinyHandExtension;`)(class {}, GLib, Gio, GdkPixbuf, cairo, {stage}, Experiment, Main);
 const ext = new TinyHand();
 ext._assetDir = assetsRoot;
 ext._assets = new Map();
@@ -51,6 +52,40 @@ for (const style of styles) {
     ext._assets.clear();
 }
 print(`PASS: ${styles.length} hands, shadows, ink, and laser rendered with GJS/Cairo (not live Shell).`);
+// Left-handed mode must paint the mirror image (within 1 px of anti-aliasing) of the right-handed pose.
+const handPixels = (leftHanded, x, gripX) => {
+    ext._assets.clear();
+    ext._config.pointer = {style: 'lavender', size: 0.13, shadow: true, leftHanded};
+    ext._last = [x, 500];
+    ext._gripX = gripX;
+    const image = new cairo.ImageSurface(cairo.Format.ARGB32, stage.width, stage.height);
+    const context = new cairo.Context(image);
+    try { ext._paintHand(context); } finally { context.$dispose(); }
+    image.flush();
+    return image;
+};
+const alphaBounds = image => {
+    const path = GLib.build_filenamev([GLib.get_tmp_dir(), `tinyhand-mirror-${GLib.random_int()}.png`]);
+    image.writeToPNG(path);
+    const pixbuf = GdkPixbuf.Pixbuf.new_from_file(path);
+    GLib.unlink(path);
+    const pixels = pixbuf.get_pixels();
+    let minX = pixbuf.width, maxX = -1, minY = pixbuf.height, maxY = -1;
+    for (let y = 0; y < pixbuf.height; y++) {
+        for (let x = 0; x < pixbuf.width; x++) {
+            if (pixels[y * pixbuf.rowstride + x * pixbuf.n_channels + 3] < 128) continue;
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        }
+    }
+    return {minX, maxX, minY, maxY};
+};
+const right = alphaBounds(handPixels(false, stage.width - 600, stage.width - 600 + 0.30 * stage.width));
+const left = alphaBounds(handPixels(true, 600, 600 - 0.30 * stage.width));
+if (right.maxX < 0 || Math.abs(left.minX - (stage.width - 1 - right.maxX)) > 1 ||
+    Math.abs(left.maxX - (stage.width - 1 - right.minX)) > 1 || Math.abs(left.minY - right.minY) > 1 || Math.abs(left.maxY - right.maxY) > 1)
+    throw new Error(`Left-handed render is not mirrored: ${JSON.stringify({left, right})}`);
+print('PASS: left-handed hand renders as the mirror image of the right-handed pose.');
 ext._config = Experiment.normalizeExperiment({enabled: true, pointer: {size: 0.13},
     ink: {width: 8}, presentation: {enabled: true, spotlight: true},
     accessibility: {highContrast: true}});

@@ -63,17 +63,18 @@ fn selftest() -> Result<(), String> {
     std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
     let assets = asset::Assets::new();
 
-    let cases: &[(&str, (f64, f64), f64, bool)] = &[
-        ("lavender", (1350.0, 380.0), 0.13, false),
-        ("lavender", (300.0, 150.0), 0.13, true),
-        ("coral", (960.0, 540.0), 0.20, false),
-        ("robot", (200.0, 900.0), 0.10, false),
-        ("glove", (1700.0, 850.0), 0.15, true),
+    let cases: &[(&str, (f64, f64), f64, bool, bool)] = &[
+        ("lavender", (1350.0, 380.0), 0.13, false, false),
+        ("lavender", (300.0, 150.0), 0.13, true, false),
+        ("coral", (960.0, 540.0), 0.20, false, false),
+        ("robot", (200.0, 900.0), 0.10, false, false),
+        ("glove", (1700.0, 850.0), 0.15, true, false),
+        ("lavender", (570.0, 380.0), 0.13, false, true),
     ];
 
-    for (i, (style, cursor, size, held)) in cases.iter().enumerate() {
+    for (i, (style, cursor, size, held, left_handed)) in cases.iter().enumerate() {
         let a = assets.get(style).ok_or(format!("asset {style} missing"))?;
-        let mut st = pose::PoseState::new(*size);
+        let mut st = pose::PoseState::new(*size, *left_handed);
         if *held {
             // two ticks so press & easing settle like a real session
             let _ = st.aim(*cursor, 1920.0, 1080.0, &a.geo, true);

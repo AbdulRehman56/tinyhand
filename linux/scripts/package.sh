@@ -52,11 +52,12 @@ fi
 mkdir -p "$DIST"
 STAGE=$(mktemp -d "$DIST/.package.XXXXXX")
 trap 'rm -rf -- "$STAGE"' EXIT
-mkdir -p "$STAGE/extension/schemas"
+mkdir -p "$STAGE/extension/schemas" "$STAGE/extension/icons"
 for file in metadata.json extension.js prefs.js preferences.js experimental.js; do
   cp "$EXTENSION_SRC/$file" "$STAGE/extension/$file"
 done
 cp "$EXTENSION_SRC"/schemas/*.gschema.xml "$STAGE/extension/schemas/"
+cp "$EXTENSION_SRC"/icons/*-symbolic.svg "$STAGE/extension/icons/"
 glib-compile-schemas --strict "$STAGE/extension/schemas"
 # GNOME 45+ compiles schemas during installation; validate them here but ship XML only.
 rm -f "$STAGE/extension/schemas/gschemas.compiled"

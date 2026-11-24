@@ -1,5 +1,7 @@
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -13,7 +15,7 @@ import * as Experiment from './experimental.js';
 
 const DEFAULTS = {
     enabled: true,
-    pointer: {style: 'lavender', size: 0.13, shadow: true},
+    pointer: {style: 'lavender', size: 0.13, shadow: true, leftHanded: false},
     ink: {choice: 'match', fade: 3.0},
     sound: {hand: true, laser: false, tap: 'thock'},
     interact: {key: 'alt', keepsHand: false},
@@ -39,6 +41,13 @@ const STYLE_INK = {
     laser: 'red',
 };
 const BINDINGS = ['toggle', 'clear', 'cycle', 'mode', 'undo', 'presentation'];
+// '<Control><Alt>h' -> 'Ctrl+Alt+H' for menu hints; GTK's formatter is unavailable in Shell.
+const acceleratorLabel = accelerator => {
+    const names = {Control: 'Ctrl', Primary: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Super: 'Super'};
+    const modifiers = [...(accelerator ?? '').matchAll(/<(\w+)>/g)].map(([, name]) => names[name] ?? name);
+    const key = (accelerator ?? '').replace(/<\w+>/g, '');
+    return key ? [...modifiers, key.length === 1 ? key.toUpperCase() : key].join('+') : '';
+};
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const now = () => GLib.get_monotonic_time() / 1e6;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -164,9 +173,11 @@ export default class TinyHandExtension extends Extension {
                 this._bound.push(name);
             }
             this._connect(this._settings, 'changed::show-toolbar', () => this._visibility());
+            this._connect(this._settings, 'changed::show-indicator', () => this._syncIndicator());
         } catch (error) {
             this._warn('compile/install the settings schema to enable shortcuts', error);
         }
+        this._syncIndicator();
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._configPath), 0o700);
             this._monitor = Gio.File.new_for_path(GLib.path_get_dirname(this._configPath))
@@ -202,6 +213,7 @@ export default class TinyHandExtension extends Extension {
         config.pointer.style = typeof config.pointer.style === 'string' && /^[a-z0-9_-]+$/.test(config.pointer.style)
             ? config.pointer.style : 'lavender';
         config.pointer.size = Number.isFinite(config.pointer.size) ? clamp(config.pointer.size, 0.08, 0.20) : 0.13;
+        config.pointer.leftHanded = config.pointer.leftHanded === true;
         config.ink.fade = Number.isFinite(config.ink.fade) ? config.ink.fade : 3;
         config.interaction.mode = config.interaction.mode === 'draw' ? 'draw' : 'point';
         config.interaction.hideCursor = config.interaction.hideCursor !== false;
@@ -397,7 +409,7 @@ export default class TinyHandExtension extends Extension {
 
     _createToolbar() {
         this._toolbar = new St.BoxLayout({
-            vertical: false, reactive: true, style_class: 'tinyhand-toolbar',
+            reactive: true, style_class: 'tinyhand-toolbar',
             style: 'background-color: rgba(28,28,32,0.94); color: white; border: 1px solid rgba(255,255,255,0.16); border-radius: 16px; padding: 8px 10px; spacing: 6px;',
         });
         this._hint = new St.Label({reactive: false, visible: false,
@@ -537,13 +549,88 @@ export default class TinyHandExtension extends Extension {
         }
     }
 
+    _syncIndicator() {
+        // A stale compiled schema lacks the key; reading it would abort the Shell.
+        const wanted = this._settings?.settings_schema?.has_key('show-indicator')
+            ? this._settings.get_boolean('show-indicator') : true;
+        if (wanted && !this._indicator) this._createIndicator();
+        else if (!wanted) this._destroyIndicator();
+    }
+
+    // Mirrors the macOS menu bar item: primary click toggles, secondary click opens the menu.
+    _createIndicator() {
+        try {
+            const indicator = new PanelMenu.Button(0.0, 'TinyHand', false);
+            this._indicatorIcon = new St.Icon({style_class: 'system-status-icon'});
+            indicator.add_child(this._indicatorIcon);
+            indicator.connect('captured-event', (_actor, event) => {
+                if (event.type() !== Clutter.EventType.BUTTON_PRESS || event.get_button() !== Clutter.BUTTON_PRIMARY ||
+                    (event.get_state() & Clutter.ModifierType.CONTROL_MASK))
+                    return Clutter.EVENT_PROPAGATE;
+                indicator.menu.close();
+                this._toggle();
+                return Clutter.EVENT_STOP;
+            });
+            const shortcutItem = (callback) => {
+                const item = new PopupMenu.PopupMenuItem('');
+                const hint = new St.Label({x_expand: true, x_align: Clutter.ActorAlign.END, opacity: 150});
+                item.add_child(hint);
+                item.connect('activate', callback);
+                return {item, hint};
+            };
+            this._indicatorToggle = shortcutItem(() => this._toggle());
+            this._indicatorClear = shortcutItem(() => this._clear());
+            this._indicatorClear.item.label.text = 'Clear Drawing';
+            this._indicatorSound = new PopupMenu.PopupSwitchMenuItem('Tap Sound', this._config.sound.hand);
+            this._indicatorSound.connect('toggled', (_item, state) => this._update({sound: {hand: state}}));
+            const menu = indicator.menu;
+            menu.addMenuItem(this._indicatorToggle.item);
+            menu.addMenuItem(this._indicatorClear.item);
+            menu.addMenuItem(this._indicatorSound);
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            menu.addAction('Settings…', () => this._openSettings());
+            menu.connect('open-state-changed', (_menu, open) => {
+                if (open) this._refreshIndicator();
+            });
+            this._indicator = indicator;
+            Main.panel.addToStatusArea(this.uuid, indicator);
+            this._refreshIndicator();
+        } catch (error) {
+            this._destroyIndicator();
+            this._warn('top bar icon unavailable', error);
+        }
+    }
+
+    _refreshIndicator() {
+        if (!this._indicator) return;
+        const on = this._config.enabled;
+        this._indicatorIcon.gicon = Gio.icon_new_for_string(
+            GLib.build_filenamev([this.path, 'icons', `tinyhand-${on ? 'on' : 'off'}-symbolic.svg`]));
+        this._indicator.accessible_name = on ? 'TinyHand is on' : 'TinyHand is off';
+        this._indicatorToggle.item.label.text = on ? 'Turn Pointer Off' : 'Turn Pointer On';
+        this._indicatorToggle.hint.text = acceleratorLabel(this._settings?.get_string('toggle'));
+        this._indicatorClear.hint.text = acceleratorLabel(this._settings?.get_string('clear'));
+        this._indicatorSound.setToggleState(this._config.sound.hand);
+    }
+
+    _destroyIndicator() {
+        this._indicator?.destroy();
+        this._indicator = null;
+        this._indicatorIcon = null;
+        this._indicatorToggle = null;
+        this._indicatorClear = null;
+        this._indicatorSound = null;
+    }
+
     _overControls(x, y) {
-        return [this._toolbar, this._inkTray].some(actor => {
-            if (!actor?.visible) return false;
-            const [left, top] = actor.get_transformed_position();
-            const [width, height] = actor.get_transformed_size();
-            return x >= left && y >= top && x <= left + width && y <= top + height;
-        });
+        return [this._toolbar, this._inkTray, this._indicator].some(actor => this._overActor(actor, x, y));
+    }
+
+    _overActor(actor, x, y) {
+        if (!actor?.visible) return false;
+        const [left, top] = actor.get_transformed_position();
+        const [width, height] = actor.get_transformed_size();
+        return x >= left && y >= top && x <= left + width && y <= top + height;
     }
 
     _getCursorTracker() {
@@ -628,6 +715,7 @@ export default class TinyHandExtension extends Extension {
             if (child instanceof St.Button) child.style = this._buttonCss();
         }
         if (this._toolButton) this._toolButton.child.text = ({freehand: 'Pen', line: 'Line', arrow: 'Arrow'})[this._config.ink.tool];
+        this._refreshIndicator();
         this._soundIcon.icon_name = this._config.sound.hand ? 'audio-volume-high-symbolic' : 'audio-volume-muted-symbolic';
         this._modeIcon.icon_name = this._config.interaction.mode === 'draw' ? 'draw-freehand-symbolic' : 'input-mouse-symbolic';
         this._modeButton.style = this._buttonCss() +
@@ -669,6 +757,14 @@ export default class TinyHandExtension extends Extension {
         this._sources.add(id);
     }
 
+    // macOS sizes and anchors the pointer per screen; the stage spans every monitor,
+    // so its height would inflate the hand on multi-monitor layouts.
+    _monitorAt(x, y) {
+        return Main.layoutManager?.monitors?.find(monitor => x >= monitor.x && y >= monitor.y &&
+            x < monitor.x + monitor.width && y < monitor.y + monitor.height) ??
+            Main.layoutManager?.primaryMonitor ?? {x: 0, y: 0, width: global.stage.width, height: global.stage.height};
+    }
+
     _tick() {
         const [x, y, mods] = global.get_pointer();
         const held = (mods & 0x100) !== 0;
@@ -693,7 +789,9 @@ export default class TinyHandExtension extends Extension {
         const overToolbar = this._overControls(x, y);
         const settingsFocused = appId.toLowerCase().includes('tinyhand') ||
             (appId === 'org.gnome.Shell.Extensions' && window?.get_title?.() === 'TinyHand Settings');
-        const interacting = (mods & 0x8) !== 0 || settingsFocused || Main.overview.visible;
+        // Like macOS suspendInput: the top bar menu and icon must stay clickable in Draw mode.
+        const indicatorBusy = this._indicator?.menu?.isOpen || (overToolbar && this._overActor(this._indicator, x, y));
+        const interacting = (mods & 0x8) !== 0 || settingsFocused || Main.overview.visible || indicatorBusy;
         if (interacting && this._drag) {
             this._cancelDrag();
             this._positionToolbar();
@@ -717,7 +815,10 @@ export default class TinyHandExtension extends Extension {
             if (this._press < 0.002) this._press = 0;
         }
         if (this._config.accessibility?.reducedMotion) this._press = 0;
-        const target = clamp(x + 0.30 * global.stage.width, 0.15 * global.stage.width, 1.05 * global.stage.width);
+        const {x: X, width: W} = this._monitorAt(x, y);
+        // Left-handed mode mirrors the grip: the rod comes in from the lower left.
+        const target = X + (this._config.pointer.leftHanded
+            ? clamp(x - X - 0.30 * W, -0.05 * W, 0.85 * W) : clamp(x - X + 0.30 * W, 0.15 * W, 1.05 * W));
         this._gripX = this._gripX === null || this._config.accessibility?.reducedMotion
             ? target : this._gripX + (target - this._gripX) * 0.08;
         const settling = Math.abs(target - this._gripX) > 0.5;
@@ -883,23 +984,49 @@ export default class TinyHandExtension extends Extension {
             const end = clamp(Math.floor(g.rodEnd * pixbuf.height), wrist + 1, pixbuf.height);
             // Cairo loads PNGs directly. Never import Gdk/Gtk/Adw into Shell.
             const source = cairo.ImageSurface.createFromPNG(path);
-            const surface = (y, height, shadow = false) => {
-                const image = new cairo.ImageSurface(cairo.Format.ARGB32, pixbuf.width, height);
+            // Sprites are mostly transparent margin (the rod is ~13% of the width); painting
+            // that margin rotated and stretched every frame dominates the cost, so crop it.
+            const columns = (y0, y1) => {
+                const pixels = pixbuf.get_pixels(), stride = pixbuf.rowstride, channels = pixbuf.n_channels;
+                let first = pixbuf.width, last = -1;
+                for (let y = y0; y < y1; y++) {
+                    for (let x = 0; x < first; x++) {
+                        if (!pixbuf.has_alpha || pixels[y * stride + x * channels + channels - 1] >= 8) {
+                            first = x;
+                            break;
+                        }
+                    }
+                    for (let x = pixbuf.width - 1; x > last; x--) {
+                        if (!pixbuf.has_alpha || pixels[y * stride + x * channels + channels - 1] >= 8) {
+                            last = x;
+                            break;
+                        }
+                    }
+                }
+                if (last < first) return {x: 0, width: pixbuf.width};
+                const x = Math.max(0, first - 2);
+                return {x, width: Math.min(pixbuf.width, last + 3) - x};
+            };
+            const surface = (y, height, {x, width}, shadow = false) => {
+                const image = new cairo.ImageSurface(cairo.Format.ARGB32, width, height);
                 const cr = new cairo.Context(image);
                 if (shadow) {
                     cr.setSourceRGBA(0, 0, 0, 1);
-                    cr.maskSurface(source, 0, -y);
+                    cr.maskSurface(source, -x, -y);
                 } else {
-                    cr.setSourceSurface(source, 0, -y);
+                    cr.setSourceSurface(source, -x, -y);
                     cr.paint();
                 }
                 cr.$dispose();
                 return image;
             };
             const slice = (image, y, height) => image.new_subpixbuf(0, y, image.width, height);
+            const handColumns = columns(top, wrist), rodColumns = columns(wrist, end);
             asset = {g, width: pixbuf.width, hand: slice(pixbuf, top, wrist - top),
-                surfaceHand: surface(top, wrist - top), surfaceRod: surface(wrist, end - wrist),
-                shadowHand: surface(top, wrist - top, true), shadowRod: surface(wrist, end - wrist, true)};
+                handX: handColumns.x, rodX: rodColumns.x,
+                surfaceHand: surface(top, wrist - top, handColumns), surfaceRod: surface(wrist, end - wrist, rodColumns),
+                shadowHand: surface(top, wrist - top, handColumns, true),
+                shadowRod: surface(wrist, end - wrist, rodColumns, true)};
         } catch (error) {
             this._warn(`cannot load hand ${style}`, error);
         }
@@ -1035,7 +1162,7 @@ export default class TinyHandExtension extends Extension {
                 this._customSurface = cairo.ImageSurface.createFromPNG(path);
             }
             const surface = this._customSurface;
-            const height = global.stage.height * this._config.pointer.size;
+            const height = this._monitorAt(...this._last).height * this._config.pointer.size;
             const scale = height / surface.getHeight();
             const width = surface.getWidth() * scale;
             cr.save();
@@ -1054,7 +1181,8 @@ export default class TinyHandExtension extends Extension {
 
     _paintLaser(cr) {
         const [x, y] = this._last;
-        const r = Math.max(4, global.stage.height * 0.0038 * this._config.pointer.size / 0.13) * (1 + 0.2 * this._press);
+        const r = Math.max(4, this._monitorAt(x, y).height * 0.0038 * this._config.pointer.size / 0.13) *
+            (1 + 0.2 * this._press);
         const glow = new cairo.RadialGradient(x, y, 0, x, y, r * 3.2);
         glow.addColorStopRGBA(0, 1, 40 / 255, 30 / 255, 0.43);
         glow.addColorStopRGBA(1, 1, 40 / 255, 30 / 255, 0);
@@ -1074,14 +1202,17 @@ export default class TinyHandExtension extends Extension {
         const asset = this._asset(this._config.pointer.style);
         if (!asset || this._gripX === null) return;
         const g = asset.g;
-        const H = global.stage.height;
+        const {x: X, y: Y, width: W, height: H} = this._monitorAt(...this._last);
+        // Left-handed mode paints the right-handed pose mirrored about the monitor centre.
+        const mirror = this._config.pointer.leftHanded;
+        const flip = px => 2 * X + W - px;
         const handPts = this._config.pointer.size * H * (1 - 0.06 * this._press);
         const s = handPts / (g.wrist - g.handTop);
         const widthPts = s * g.aspect;
         const handTipPts = (g.wrist - g.tip) * s;
         const tipOffX = (g.tipX - g.rodX) * widthPts;
-        const gx = this._gripX, gy = 1.12 * H;
-        const dx = this._last[0] - gx, dy = this._last[1] - gy;
+        const gx = mirror ? flip(this._gripX) : this._gripX, gy = Y + 1.12 * H;
+        const dx = (mirror ? flip(this._last[0]) : this._last[0]) - gx, dy = this._last[1] - gy;
         const reach = Math.hypot(dx, dy);
         const along = Math.sqrt(Math.max(0, reach * reach - tipOffX * tipOffX));
         // Preserve the native minimum length. If this clamp binds (e.g. the
@@ -1089,16 +1220,32 @@ export default class TinyHandExtension extends Extension {
         // impossible without changing the specified grip, hand size or minimum.
         const rodLen = Math.max(0.05 * H, along - handTipPts);
         const rotation = Math.atan2(dy, dx) - Math.atan2(-(rodLen + handTipPts), tipOffX);
+        const scaled = this._scaledAsset(asset, widthPts / (1 - 0.06 * this._press));
+        const pts = widthPts / asset.width;
         const draw = (hand, rod, alpha, offsetX = 0, offsetY = 0) => {
             cr.save();
+            // Like the per-screen macOS overlay, keep the rod off neighbouring monitors.
+            cr.rectangle(X, Y, W, H);
+            cr.clip();
+            if (mirror) {
+                cr.translate(2 * X + W, 0);
+                cr.scale(-1, 1);
+            }
             cr.translate(gx, gy);
             cr.translate(offsetX, offsetY);
             cr.rotate(rotation);
-            for (const [image, y, height] of [[rod, -rodLen, rodLen], [hand, -rodLen - handPts, handPts]]) {
+            for (const [image, source, sourceX, y, height] of [[rod, asset.surfaceRod, asset.rodX, -rodLen, rodLen],
+                [hand, asset.surfaceHand, asset.handX, -rodLen - handPts, handPts]]) {
                 cr.save();
-                cr.translate(-g.rodX * widthPts, y);
-                cr.scale(widthPts / asset.width, height / image.getHeight());
+                // Surfaces are cropped; place them where their columns sat in the full sprite.
+                cr.translate((sourceX - g.rodX * asset.width) * pts, y);
+                cr.scale(source.getWidth() * pts / image.getWidth(), height / image.getHeight());
                 cr.setSourceSurface(image, 0, 0);
+                // Sources are pre-scaled to near display size; bilinear is cheap and sharp enough here.
+                cr.getSource().setFilter(cairo.Filter.BILINEAR);
+                // Without a clip, a rotated paint composites across the whole stage-sized canvas.
+                cr.rectangle(0, 0, image.getWidth(), image.getHeight());
+                cr.clip();
                 cr.paintWithAlpha(alpha);
                 cr.restore();
             }
@@ -1109,9 +1256,32 @@ export default class TinyHandExtension extends Extension {
             const angle = -rotation;
             const sx = lift * 0.6 * Math.cos(angle) - lift * Math.sin(angle);
             const sy = lift * 0.6 * Math.sin(angle) + lift * Math.cos(angle);
-            draw(asset.shadowHand, asset.shadowRod, 0.26 + 0.02 * this._press, sx, sy);
+            draw(scaled.shadowHand, scaled.shadowRod, 0.26 + 0.02 * this._press, sx, sy);
         }
-        draw(asset.surfaceHand, asset.surfaceRod, 1);
+        draw(scaled.surfaceHand, scaled.surfaceRod, 1);
+    }
+
+    // Downscaling the full-resolution sprites with Cairo's default filter on every
+    // frame costs ~15 ms on large stages and stalls the Shell; cache them at display size.
+    _scaledAsset(asset, widthPts) {
+        const scale = this._area?.get_resource_scale?.() ?? 1;
+        const width = clamp(Math.ceil(widthPts * scale), 1, asset.width);
+        if (asset.scaled?.width === width) return asset.scaled;
+        const ratio = width / asset.width;
+        const shrink = image => {
+            const outWidth = Math.max(1, Math.round(image.getWidth() * ratio));
+            const height = Math.max(1, Math.round(image.getHeight() * ratio));
+            const out = new cairo.ImageSurface(cairo.Format.ARGB32, outWidth, height);
+            const cr = new cairo.Context(out);
+            cr.scale(outWidth / image.getWidth(), height / image.getHeight());
+            cr.setSourceSurface(image, 0, 0);
+            cr.paint();
+            cr.$dispose();
+            return out;
+        };
+        asset.scaled = {width, surfaceHand: shrink(asset.surfaceHand), surfaceRod: shrink(asset.surfaceRod),
+            shadowHand: shrink(asset.shadowHand), shadowRod: shrink(asset.shadowRod)};
+        return asset.scaled;
     }
 
     disable() {
@@ -1135,6 +1305,7 @@ export default class TinyHandExtension extends Extension {
         this._monitor?.cancel();
         this._monitor = null;
         for (const name of this._bound ?? []) Main.wm.removeKeybinding(name);
+        this._destroyIndicator();
         this._area?.destroy();
         this._inkDot?.destroy();
         this._modeIcon?.destroy();

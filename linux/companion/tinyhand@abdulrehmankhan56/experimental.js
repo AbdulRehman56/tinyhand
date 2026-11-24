@@ -33,6 +33,7 @@ export function normalizeExperiment(input) {
     config.custom.tipY = bounded(config.custom.tipY, 0.05, 0, 1);
     if (record(config.pointer)) {
         config.pointer.size = bounded(config.pointer.size, 0.13, 0.08, 0.20);
+        config.pointer.leftHanded = config.pointer.leftHanded === true;
         config.pointer.style = typeof config.pointer.style === 'string' && /^[a-z0-9_-]+$/.test(config.pointer.style)
             ? config.pointer.style : 'lavender';
     }

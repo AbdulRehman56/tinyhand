@@ -19,6 +19,7 @@ pub struct HandGeometry {
 
 pub struct PoseState {
     pub hand_len_frac: f64,
+    left_handed: bool,
     press_amount: f64,
     grip_x: Option<f64>,
     grip_target: Option<f64>,
@@ -43,6 +44,9 @@ pub struct Pose {
     pub press: f64,
     pub shadow_dx: f64,
     pub shadow_dy: f64,
+    /// Left-handed: the right-handed pose mirrored about the screen's vertical
+    /// centre line. Local x is flipped before sampling the (right-handed) sprite.
+    pub mirror: bool,
 }
 
 impl Pose {
@@ -51,7 +55,7 @@ impl Pose {
     pub fn tip_point(&self, g: &HandGeometry) -> (f64, f64) {
         // hand_pts is the scaled span length (span * s); recover per-fraction pts.
         let hand_tip_pts = (g.wrist - g.tip) / (g.wrist - g.hand_top) * self.hand_pts;
-        let tip_off_x = (g.tip_x - g.rod_x) * self.width_pts;
+        let tip_off_x = (g.tip_x - g.rod_x) * self.width_pts * if self.mirror { -1.0 } else { 1.0 };
         // Vector from grip along rod axis to the tip in y-down space.
         // Local space: rod points up = (tipOffX, -(rodLen + handTipPts)).
         let (vx, vy) = rotate(tip_off_x, -(self.rod_len + hand_tip_pts), self.rotation);
@@ -65,9 +69,10 @@ pub fn rotate(x: f64, y: f64, r: f64) -> (f64, f64) {
 }
 
 impl PoseState {
-    pub fn new(size_frac: f64) -> Self {
+    pub fn new(size_frac: f64, left_handed: bool) -> Self {
         Self {
             hand_len_frac: size_frac,
+            left_handed,
             press_amount: 0.0,
             grip_x: None,
             grip_target: None,
@@ -103,6 +108,28 @@ impl PoseState {
     /// One animation tick. `held` = button currently pressed (or pen drag).
     /// Returns None for laser (caller draws the dot itself).
     pub fn aim(
+        &mut self,
+        cursor: (f64, f64),
+        screen_w: f64,
+        screen_h: f64,
+        g: &HandGeometry,
+        held: bool,
+    ) -> Pose {
+        if self.left_handed {
+            // Aim the right-handed pose at the mirrored cursor, then mirror it back.
+            // The grip smoothing state stays in mirrored space.
+            let mut pose =
+                self.aim_right((screen_w - cursor.0, cursor.1), screen_w, screen_h, g, held);
+            pose.grip_x = screen_w - pose.grip_x;
+            pose.rotation = -pose.rotation;
+            pose.shadow_dx = -pose.shadow_dx;
+            pose.mirror = true;
+            return pose;
+        }
+        self.aim_right(cursor, screen_w, screen_h, g, held)
+    }
+
+    fn aim_right(
         &mut self,
         cursor: (f64, f64),
         screen_w: f64,
@@ -162,6 +189,7 @@ impl PoseState {
             press: self.press_amount,
             shadow_dx: sdx,
             shadow_dy: sdy,
+            mirror: false,
         }
     }
 
@@ -192,7 +220,7 @@ mod tests {
 
     #[test]
     fn tip_lands_on_cursor() {
-        let mut st = PoseState::new(0.13);
+        let mut st = PoseState::new(0.13, false);
         let g = geo();
         let cursor = (900.0, 500.0);
         let pose = st.aim(cursor, 1920.0, 1080.0, &g, false);
@@ -205,7 +233,7 @@ mod tests {
 
     #[test]
     fn tip_lands_on_cursor_second_click() {
-        let mut st = PoseState::new(0.13);
+        let mut st = PoseState::new(0.13, false);
         let g = geo();
         for cursor in [
             (100.0, 100.0),
@@ -227,7 +255,7 @@ mod tests {
     #[test]
     fn tip_left_of_rod_axis() {
         // Asymmetric tip (tipX != rodX) must still land on the cursor.
-        let mut st = PoseState::new(0.15);
+        let mut st = PoseState::new(0.15, false);
         let mut g = geo();
         g.tip_x = 0.60;
         let cursor = (400.0, 300.0);
@@ -237,8 +265,42 @@ mod tests {
     }
 
     #[test]
+    fn left_handed_tip_lands_on_cursor() {
+        let mut st = PoseState::new(0.13, true);
+        let mut g = geo();
+        g.tip_x = 0.60;
+        for cursor in [
+            (900.0, 500.0),
+            (100.0, 100.0),
+            (1800.0, 900.0),
+            (1870.0, 1000.0),
+        ] {
+            let pose = st.aim(cursor, 1920.0, 1080.0, &g, false);
+            let (tx, ty) = pose.tip_point(&g);
+            assert!(
+                (tx - cursor.0).abs() < 0.5 && (ty - cursor.1).abs() < 0.5,
+                "tip=({tx:.2},{ty:.2}) cursor={cursor:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn left_handed_mirrors_right_handed_pose() {
+        let g = geo();
+        let right = PoseState::new(0.13, false).aim((1420.0, 500.0), 1920.0, 1080.0, &g, false);
+        let left = PoseState::new(0.13, true).aim((500.0, 500.0), 1920.0, 1080.0, &g, false);
+        assert!((left.grip_x - (1920.0 - right.grip_x)).abs() < 1e-9);
+        assert!((left.rotation + right.rotation).abs() < 1e-9);
+        assert!((left.shadow_dx + right.shadow_dx).abs() < 1e-9);
+        assert!(
+            left.grip_x < 500.0,
+            "left-handed grip must sit left of the cursor"
+        );
+    }
+
+    #[test]
     fn press_squeezes_hand() {
-        let mut st = PoseState::new(0.13);
+        let mut st = PoseState::new(0.13, false);
         let g = geo();
         let a = st.aim((500.0, 500.0), 1920.0, 1080.0, &g, false);
         st.press();

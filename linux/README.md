@@ -7,9 +7,9 @@ TinyHand is a tiny hand on a stick that points at things on your screen: click t
 | Session | Mode |
 | --- | --- |
 | Xorg/X11 | The Rust app, `tinyhand`, hides the real cursor, swallows clicks for tapping/drawing, lets panels/dock areas pass through, and provides a StatusNotifier tray menu (toggle / next hand / clear / quit). Hold Alt to interact normally. |
-| GNOME Wayland (45–50; 45–49 experimental) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. |
+| GNOME Wayland (45–51; 45–49 experimental) | The companion Shell extension draws the hand as a shell overlay. **Point** mode allows normal clicks without ink. **Draw** mode captures pointer drags, avoiding text selection underneath; hold **Alt** to interact normally. The system cursor can be hidden. The bottom toolbar offers hand previews, Point/Draw, ink colors, sound, clear, settings, and hide. Like the macOS menu bar item, a top bar icon turns the pointer on/off with a left click; right-click opens a menu with the toggle, Clear Drawing, Tap Sound and Settings (hide it with `gsettings set org.gnome.shell.extensions.tinyhand show-indicator false`). |
 
-Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental prerelease; GNOME 50.1 is the only desktop-tested version. The toolkit additionally passed an isolated real GNOME 50.1 load/config-reload/disable/re-enable test; hands-on input and mixed-DPI testing remain limited. See [COMPATIBILITY.md](./COMPATIBILITY.md) for the version matrix, library minimums and testing limits.
+Both modes share `~/.config/tinyhand/config.json`. Run only one mode at a time. This is an experimental prerelease; GNOME 50.1 is the only desktop-tested version. The toolkit additionally passed isolated real GNOME 50.1 and 51.1 load/config-reload/disable/re-enable tests; hands-on input and mixed-DPI testing remain limited. See [COMPATIBILITY.md](./COMPATIBILITY.md) for the version matrix, library minimums and testing limits.
 
 ## Install
 
@@ -63,6 +63,7 @@ Config is shared by both apps and hot-reloads on save.
 | `pointer.style` | `lavender`, `glove`, `coral`, `plush`, `robot`, `pink`, `blue`, `mint`, `lemon`, `black`, `chrome`, `holo`, `fuzzy`, `wood`, `marble`, `terrazzo`, `glass`, `jelly`, `pastel`, `pixel`, `lowpoly`, `knit`, `skeleton`, `astro`, `space`, `monster`, `water`, `lava`, `grass`, `cactus`, `choco`, `cloud`, `mech`, `neon`, `leaf`, `cookie`, or `laser` |
 | `pointer.size` | Hand size as a fraction of screen height, `0.08`–`0.20` (default `0.13`). |
 | `pointer.shadow` | Boolean. |
+| `pointer.leftHanded` | Boolean (default `false`). Holds the hand from the lower left instead of the lower right; the hand and its shadow are mirrored. Applies to the hand pointers, not the laser or a custom sprite. |
 | `toolbar.pinnedStyles` | GNOME only: an ordered array of up to six style IDs; duplicates and unknown IDs are ignored. An empty array hides favorites; the selected pointer stays visible. |
 | `interaction.mode`, `interaction.hideCursor` | GNOME only: `point` (default, normal clicks/no ink) or `draw` (captures drags); hide the system cursor by default. Cursor visibility is restored when TinyHand is disabled. |
 | `ink.choice` | `match` (each hand's matching color), or `red` / `orange` / `yellow` / `green` / `blue` / `purple` / `white` / `black`. |
