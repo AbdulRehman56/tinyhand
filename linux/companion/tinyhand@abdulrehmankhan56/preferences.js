@@ -8,7 +8,7 @@ import {normalizeExperiment} from './experimental.js';
 
 const DEFAULTS = {
     enabled: true,
-    pointer: {style: 'lavender', size: 0.13, shadow: true},
+    pointer: {style: 'lavender', size: 0.13, shadow: true, leftHanded: false},
     ink: {choice: 'match', fade: 3.0, tool: 'freehand', width: 6, permanent: false},
     sound: {hand: true, laser: false, tap: 'thock', volume: 1},
     interaction: {mode: 'point', hideCursor: true},
@@ -428,6 +428,7 @@ export function buildPreferences(window, assetDir = null, settings = null) {
     slider(pointer, 'Size', 'Relative to the screen height.', 'pointer', 'size', 0.08, 0.20, 0.01, 0.13,
         value => `${Math.round(value * 100)}%`);
     switchRow(pointer, 'Shadow under the pointer', 'Add depth beneath the hand.', 'pointer', 'shadow', true);
+    switchRow(pointer, 'Left-handed', 'Hold the hand from the left side of the screen.', 'pointer', 'leftHanded', false);
 
     const drawing = page('Drawing', 'document-edit-symbolic');
     const ink = group(drawing, 'Ink', 'Customize the marks your pointer leaves behind.');

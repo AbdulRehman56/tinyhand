@@ -138,6 +138,7 @@ pub fn draw_hand(pix: &mut tiny_skia::Pixmap, asset: &HandAsset, pose: &Pose, ex
                 }
                 (false, (ly + pose.rod_len) / pose.rod_len)
             };
+            let lx = if pose.mirror { -lx } else { lx };
             let u = lx / hw + 0.5; // 0..1 across full image width
             let src_x_f = (g.rod_x + u - 0.5) * iw; // full image width maps to local width
             let src_y_f = if in_hand {
@@ -217,6 +218,7 @@ pub fn draw_shadow(pix: &mut tiny_skia::Pixmap, asset: &HandAsset, pose: &Pose) 
             if ly >= 0.0 || ly < rod_top_local {
                 continue;
             }
+            let lx = if pose.mirror { -lx } else { lx };
             let src_x_f = (g.rod_x + lx / hw) * iw;
             // Match the hand's independently scaled hand and rod slices.
             let src_y_f = if ly < -pose.rod_len {
@@ -414,6 +416,7 @@ mod tests {
             press: 0.0,
             shadow_dx: 0.0,
             shadow_dy: 0.0,
+            mirror: false,
         };
         let mut shadow = tiny_skia::Pixmap::new(24, 120).unwrap();
         draw_shadow(&mut shadow, &asset, &pose);

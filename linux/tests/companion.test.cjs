@@ -71,9 +71,17 @@ test('partial config falls back safely and clamps hand size', () => {
     const config = new context.TinyHand()._readConfig();
     assert.equal(config.pointer.size, 0.20);
     assert.equal(config.pointer.style, 'lavender');
+    assert.equal(config.pointer.leftHanded, false);
     assert.equal(config.ink.fade, 3);
     assert.equal(config.enabled, true);
     assert.equal(config.futureSetting, 'preserve');
+});
+
+test('left-handed mode accepts only a boolean true', () => {
+    for (const [value, expected] of [[true, true], [false, false], ['yes', false], [1, false]]) {
+        disk = {pointer: {leftHanded: value}};
+        assert.equal(new context.TinyHand()._readConfig().pointer.leftHanded, expected);
+    }
 });
 
 test('merge preserves unknown nested settings without sharing defaults', () => {

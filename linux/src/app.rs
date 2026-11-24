@@ -119,7 +119,7 @@ impl App {
             assets: Assets::new(),
             ink_choice,
             style,
-            pose_state: PoseState::new(cfg.pointer.size),
+            pose_state: PoseState::new(cfg.pointer.size, cfg.pointer.left_handed),
             laser,
             enabled: cfg.enabled.unwrap_or(true),
             strokes: Vec::new(),
@@ -240,7 +240,7 @@ impl App {
     }
 
     fn poses_clear(&mut self) {
-        self.pose_state = PoseState::new(self.cfg.pointer.size);
+        self.pose_state = PoseState::new(self.cfg.pointer.size, self.cfg.pointer.left_handed);
         self.active = None;
     }
 
@@ -530,7 +530,8 @@ impl App {
             return;
         }
         let reset_pose = cfg.pointer.style != self.style
-            || (cfg.pointer.size - self.cfg.pointer.size).abs() > 1e-9;
+            || (cfg.pointer.size - self.cfg.pointer.size).abs() > 1e-9
+            || cfg.pointer.left_handed != self.cfg.pointer.left_handed;
         self.style = cfg.pointer.style.clone();
         self.laser = self.style == "laser";
         self.ink_choice = InkChoice::parse(&cfg.ink.choice);

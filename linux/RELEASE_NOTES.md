@@ -7,6 +7,9 @@
   toggle and Clear Drawing (with their shortcuts), Tap Sound and Settings. The menu and
   icon stay clickable in Draw mode. Hide it with the `show-indicator` GSettings key.
   The macOS Quit and Accessibility items have no extension equivalent and are omitted.
+- Add a left-handed mode (Settings → Appearance → Left-handed, or `pointer.leftHanded`
+  in `config.json`) to both the GNOME extension and the X11 app: the hand reaches in
+  from the lower left, drawn as the mirror image of the right-handed pose.
 
 - Declare GNOME Shell 51 in `metadata.json`; 51 previously marked the extension OUT OF DATE.
 - Drop the toolbar's `vertical: false` `St.BoxLayout` property, which GNOME 51 removed

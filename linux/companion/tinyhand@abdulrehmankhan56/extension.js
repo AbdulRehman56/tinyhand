@@ -15,7 +15,7 @@ import * as Experiment from './experimental.js';
 
 const DEFAULTS = {
     enabled: true,
-    pointer: {style: 'lavender', size: 0.13, shadow: true},
+    pointer: {style: 'lavender', size: 0.13, shadow: true, leftHanded: false},
     ink: {choice: 'match', fade: 3.0},
     sound: {hand: true, laser: false, tap: 'thock'},
     interact: {key: 'alt', keepsHand: false},
@@ -213,6 +213,7 @@ export default class TinyHandExtension extends Extension {
         config.pointer.style = typeof config.pointer.style === 'string' && /^[a-z0-9_-]+$/.test(config.pointer.style)
             ? config.pointer.style : 'lavender';
         config.pointer.size = Number.isFinite(config.pointer.size) ? clamp(config.pointer.size, 0.08, 0.20) : 0.13;
+        config.pointer.leftHanded = config.pointer.leftHanded === true;
         config.ink.fade = Number.isFinite(config.ink.fade) ? config.ink.fade : 3;
         config.interaction.mode = config.interaction.mode === 'draw' ? 'draw' : 'point';
         config.interaction.hideCursor = config.interaction.hideCursor !== false;
@@ -806,7 +807,10 @@ export default class TinyHandExtension extends Extension {
             if (this._press < 0.002) this._press = 0;
         }
         if (this._config.accessibility?.reducedMotion) this._press = 0;
-        const target = clamp(x + 0.30 * global.stage.width, 0.15 * global.stage.width, 1.05 * global.stage.width);
+        const W = global.stage.width;
+        // Left-handed mode mirrors the grip: the rod comes in from the lower left.
+        const target = this._config.pointer.leftHanded
+            ? clamp(x - 0.30 * W, -0.05 * W, 0.85 * W) : clamp(x + 0.30 * W, 0.15 * W, 1.05 * W);
         this._gripX = this._gripX === null || this._config.accessibility?.reducedMotion
             ? target : this._gripX + (target - this._gripX) * 0.08;
         const settling = Math.abs(target - this._gripX) > 0.5;
@@ -1189,14 +1193,16 @@ export default class TinyHandExtension extends Extension {
         const asset = this._asset(this._config.pointer.style);
         if (!asset || this._gripX === null) return;
         const g = asset.g;
-        const H = global.stage.height;
+        const H = global.stage.height, W = global.stage.width;
+        // Left-handed mode paints the right-handed pose mirrored about the stage centre.
+        const mirror = this._config.pointer.leftHanded;
         const handPts = this._config.pointer.size * H * (1 - 0.06 * this._press);
         const s = handPts / (g.wrist - g.handTop);
         const widthPts = s * g.aspect;
         const handTipPts = (g.wrist - g.tip) * s;
         const tipOffX = (g.tipX - g.rodX) * widthPts;
-        const gx = this._gripX, gy = 1.12 * H;
-        const dx = this._last[0] - gx, dy = this._last[1] - gy;
+        const gx = mirror ? W - this._gripX : this._gripX, gy = 1.12 * H;
+        const dx = (mirror ? W - this._last[0] : this._last[0]) - gx, dy = this._last[1] - gy;
         const reach = Math.hypot(dx, dy);
         const along = Math.sqrt(Math.max(0, reach * reach - tipOffX * tipOffX));
         // Preserve the native minimum length. If this clamp binds (e.g. the
@@ -1208,6 +1214,10 @@ export default class TinyHandExtension extends Extension {
         const pts = widthPts / asset.width;
         const draw = (hand, rod, alpha, offsetX = 0, offsetY = 0) => {
             cr.save();
+            if (mirror) {
+                cr.translate(W, 0);
+                cr.scale(-1, 1);
+            }
             cr.translate(gx, gy);
             cr.translate(offsetX, offsetY);
             cr.rotate(rotation);

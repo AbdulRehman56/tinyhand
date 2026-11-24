@@ -2,7 +2,7 @@
 // JSON schema:
 // {
 //   "flag_hotkeys_warning_shown": false,
-//   "pointer": { "style": "lavender", "size": 0.13, "shadow": true },
+//   "pointer": { "style": "lavender", "size": 0.13, "shadow": true, "leftHanded": false },
 //   "ink":     { "choice": "match", "fade": 3.0 },
 //   "sound":   { "hand": true, "laser": false, "tap": "thock" },
 //   "interact":{ "key": "alt", "keepsHand": false },
@@ -22,6 +22,8 @@ pub struct PointerCfg {
     pub style: String,
     pub size: f64,
     pub shadow: bool,
+    /// Hold the hand from the lower left instead of the lower right.
+    pub left_handed: bool,
 }
 
 impl Default for PointerCfg {
@@ -30,6 +32,7 @@ impl Default for PointerCfg {
             style: "lavender".into(),
             size: 0.13,
             shadow: true,
+            left_handed: false,
         }
     }
 }
